@@ -78,7 +78,7 @@ const SYSTEM_PROMPT = `You turn short notes from the user into actions for their
 How to fill each action:
 - add_task: task_text is a short, clear title (drop filler like "remind me to"). due is a YYYY-MM-DD date worked out from today's date, or "" when no date is given. Events, appointments and reminders are tasks with a due date.
 - complete_task: only for a task that appears in the open-task list; put its id in task_id.
-- add_entry: money the user received is income, money they spent or paid is expense. amount is a positive number in the user's currency. Use the closest category from the matching list, or Other if none fits. note is a few words of context, such as who or what. date is today unless the user says otherwise.
+- add_entry: money the user received is income, money they spent or paid is expense. amount is a positive number in the user's currency. Use the closest category from the matching list, or Other if none fits. Nightlife is clubs, bars, covers and drinks out; Technology is gadgets, electronics and accessories; Dumb things is impulse buys or purchases the user calls dumb, silly or a waste. note is a few words of context, such as who or what. date is today unless the user says otherwise.
 - Fields that don't apply to an action: use "" for text and 0 for numbers.
 
 reply is one short, friendly sentence in the user's language that confirms what you did. If the message is unclear (for example, an amount or a task is missing) or asks for something the app can't do, return no actions and use reply to say so or ask a short question.`;

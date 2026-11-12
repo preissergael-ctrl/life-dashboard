@@ -47,6 +47,13 @@ const PDFImport = (() => {
       'fruterra', 'supermercado', 'panaderia', 'tortilleria', 'carniceria',
       'costco', "sam's", 'sams club', 'la comer', 'city market', 'heb ',
     ],
+    Nightlife: [
+      'antro', 'club', 'bar ', 'cantina', 'mezcal', 'cerveceria', 'pub ', 'lounge', 'disco', 'cover',
+    ],
+    Technology: [
+      'apple store', 'istore', 'best buy', 'steren', 'cyberpuerta', 'ddtech', 'intercompras',
+      'samsung', 'xiaomi', 'mac store', 'radioshack', 'telcel tienda',
+    ],
     Transport: [
       'uber', 'cabify', 'didi', 'gasolina', 'gasolinera', 'pemex', 'shell', 'mobil', 'bp ', 'g500', 'oxxo gas',
       'estacion', 'metrobus', 'autobus', 'peaje', 'caseta', 'autopista', 'autolavado',
@@ -71,8 +78,7 @@ const PDFImport = (() => {
     ],
     Shopping: [
       'amazon', 'mercado libre', 'mercadolibre', 'liverpool', 'zara', 'h&m', 'shein', 'temu',
-      'palacio de hierro', 'sears', 'coppel', 'elektra', 'office depot', 'best buy',
-      'apple store', 'sanborns', 'mixup', 'suburbia', 'walmart.com',
+      'palacio de hierro', 'sears', 'coppel', 'elektra', 'office depot', 'sanborns', 'mixup', 'suburbia', 'walmart.com',
     ],
   };
 
