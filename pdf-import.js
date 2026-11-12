@@ -54,6 +54,10 @@ const PDFImport = (() => {
       'apple store', 'istore', 'best buy', 'steren', 'cyberpuerta', 'ddtech', 'intercompras',
       'samsung', 'xiaomi', 'mac store', 'radioshack', 'telcel tienda',
     ],
+    'Self care': [
+      'barberia', 'barber', 'peluqueria', 'estetica', 'salon de belleza', 'spa ', 'sephora', 'ulta',
+      'manicure', 'nails', 'unas', 'skin',
+    ],
     Transport: [
       'uber', 'cabify', 'didi', 'gasolina', 'gasolinera', 'pemex', 'shell', 'mobil', 'bp ', 'g500', 'oxxo gas',
       'estacion', 'metrobus', 'autobus', 'peaje', 'caseta', 'autopista', 'autolavado',

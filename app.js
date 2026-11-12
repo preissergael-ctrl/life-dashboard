@@ -8,13 +8,13 @@
 const STORAGE_KEY = 'lifedash:v1';
 
 const CATEGORIES = {
-  expense: ['Food', 'Transport', 'School', 'Fun', 'Nightlife', 'Shopping', 'Technology', 'Bills', 'Health', 'Dumb things', 'Other'],
+  expense: ['Food', 'Transport', 'School', 'Fun', 'Nightlife', 'Shopping', 'Technology', 'Bills', 'Health', 'Self care', 'Dumb things', 'Other'],
   income: ['Allowance', 'Job', 'Gift', 'Other'],
 };
 // Which pixel-art drawing (in pixels.js) each category uses
 const CATEGORY_ICON = {
   Food: 'burger', Transport: 'bus', School: 'books', Fun: 'controller', Shopping: 'bag', Bills: 'receipt',
-  Health: 'firstaid', Nightlife: 'cocktail', Technology: 'laptop', 'Dumb things': 'silly', Other: 'box', Allowance: 'banknote', Job: 'briefcase', Gift: 'gift',
+  Health: 'firstaid', Nightlife: 'cocktail', Technology: 'laptop', 'Self care': 'scissors', 'Dumb things': 'silly', Other: 'box', Allowance: 'banknote', Job: 'briefcase', Gift: 'gift',
 };
 const catIcon = (cat, size = 24) => pixelIcon(CATEGORY_ICON[cat] || 'box', size);
 

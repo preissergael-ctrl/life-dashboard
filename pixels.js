@@ -26,6 +26,24 @@ const PIXEL_COLORS = {
 };
 
 const PIXEL_ART = {
+  scissors: [
+    '................',
+    '..k..........k..',
+    '..kk........kk..',
+    '...kGk....kGk...',
+    '....kGk..kGk....',
+    '.....kGkkGk.....',
+    '......kGGk......',
+    '......kggk......',
+    '.....krkkrk.....',
+    '....krk..krk....',
+    '..kkrk....krkk..',
+    '.krrrrk..krrrrk.',
+    '.krwwrk..krwwrk.',
+    '.krwwrk..krwwrk.',
+    '.krrrrk..krrrrk.',
+    '..kkkk....kkkk..',
+  ],
   cocktail: [
     '................',
     '.kkkkkkkkkkkkkk.',
