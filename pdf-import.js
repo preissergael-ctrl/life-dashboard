@@ -7,20 +7,22 @@
 
 const PDFImport = (() => {
 
-  const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.mjs';
-  const WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.mjs';
+  // PDF.js (Mozilla, Apache-2.0) is bundled in vendor/pdfjs so it works offline.
+  // It's only loaded the first time someone picks a PDF.
+  const PDFJS_URL = new URL('vendor/pdfjs/pdf.min.mjs', document.baseURI).href;
+  const WORKER_URL = new URL('vendor/pdfjs/pdf.worker.min.mjs', document.baseURI).href;
 
   let _pdfjs = null;
 
   async function loadPDFJS() {
     if (_pdfjs) return _pdfjs;
     try {
-      const lib = await import(PDFJS_CDN);
-      lib.GlobalWorkerOptions.workerSrc = WORKER_CDN;
+      const lib = await import(PDFJS_URL);
+      lib.GlobalWorkerOptions.workerSrc = WORKER_URL;
       _pdfjs = lib;
       return lib;
     } catch {
-      throw new Error('No se pudo cargar el lector de PDF. Verifica tu conexión a internet e intenta de nuevo.');
+      throw new Error('Could not load the PDF reader. Close and reopen the app, then try again.');
     }
   }
 
@@ -86,15 +88,15 @@ const PDFImport = (() => {
     try {
       buffer = await file.arrayBuffer();
     } catch {
-      throw new Error('No se pudo leer el archivo PDF.');
+      throw new Error('Could not read that file.');
     }
 
     let pdf;
     try {
       pdf = await pdfjs.getDocument({ data: buffer }).promise;
     } catch (err) {
-      if (err?.message?.includes('password')) throw new Error('El PDF está protegido con contraseña. Desbloquéalo primero.');
-      throw new Error('El archivo no es un PDF válido.');
+      if (err?.message?.includes('password')) throw new Error('This PDF is password-protected. Unlock it first.');
+      throw new Error('That file is not a valid PDF.');
     }
 
     const allLines = [];
@@ -164,7 +166,7 @@ const PDFImport = (() => {
       // Description: text between the date and the first amount
       const afterDate = line.slice(line.indexOf(dateMatch[1]) + dateMatch[1].length).trim();
       const firstAmtPos = afterDate.search(/\$?\s*[\d]{1,3}(?:,\d{3})*\.\d{2}/);
-      const desc = (firstAmtPos > 0 ? afterDate.slice(0, firstAmtPos) : afterDate).trim();
+      const desc = (firstAmtPos > 0 ? afterDate.slice(0, firstAmtPos) : afterDate).replace(/[\s\-−$]+$/, '').trim();
 
       const lineLower = line.toLowerCase();
       const isNegative = NEG_RE.test(line);
@@ -219,7 +221,7 @@ const PDFImport = (() => {
     const lines = await extractLines(file);
     const result = parseLines(lines);
     if (result.entries.length === 0) {
-      throw new Error('No se encontraron transacciones. Asegúrate de que sea un estado de cuenta de Plata con movimientos.');
+      throw new Error('No transactions found. Make sure it is a Plata statement that has movements in it.');
     }
     return result;
   }

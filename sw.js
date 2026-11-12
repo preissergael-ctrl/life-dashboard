@@ -1,7 +1,7 @@
 // Service worker: lets the app open with no internet.
 // Strategy: try the network first (so you always get the newest version),
 // fall back to the saved copy when offline.
-const CACHE = 'lifedash-v4';
+const CACHE = 'lifedash-v5';
 const APP_FILES = [
   './', './index.html', './styles.css', './pixels.js', './pdf-import.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
   './manifest.webmanifest',
@@ -25,7 +25,9 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   event.respondWith(
-    fetch(req)
+    // cache: 'no-cache' = always ask the server for the newest file, so the phone
+    // never mixes an old page with new code (that's what broke the icons).
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));

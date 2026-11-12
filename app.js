@@ -622,7 +622,8 @@ function clearImportPreview() {
   $('#pdf-file').value = '';
 }
 
-document.getElementById('pdf-file').addEventListener('change', async (ev) => {
+// `?.` = if the button is missing (e.g. an old cached page), skip instead of crashing the whole app
+document.getElementById('pdf-file')?.addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
   if (!file) return;
   const label = $('#pdf-import-label');
@@ -632,7 +633,7 @@ document.getElementById('pdf-file').addEventListener('change', async (ev) => {
     const parsed = await PDFImport.parse(file);
     renderImportPreview(parsed);
   } catch (err) {
-    toast(err.message || 'No se pudo leer el PDF.');
+    toast(err.message || 'Could not read that PDF.');
     ev.target.value = '';
   } finally {
     label.childNodes[0].textContent = original;
