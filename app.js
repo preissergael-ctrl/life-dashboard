@@ -565,15 +565,15 @@ window.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) { state
 // Coming back to the app (e.g. the next day): refresh "today" labels
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
-/* ---------- CSV bank import ---------- */
+/* ---------- PDF bank import ---------- */
 
-let pendingImport = null; // entries waiting for user confirmation
+let pendingImport = null;
 
 function isDuplicateEntry(e) {
   return state.entries.some((x) => x.date === e.date && x.amount === e.amount && x.type === e.type);
 }
 
-function renderCSVPreview(parsed) {
+function renderImportPreview(parsed) {
   const { entries, skipped } = parsed;
   const dupes = entries.filter(isDuplicateEntry).length;
   const fresh = entries.length - dupes;
@@ -608,52 +608,51 @@ function renderCSVPreview(parsed) {
   $('#csv-preview-list').innerHTML = html;
 
   const btn = $('#csv-import-btn');
-  if (fresh === 0) {
-    btn.textContent = 'Nothing new to import';
-    btn.disabled = true;
-  } else {
-    btn.textContent = `Import ${fresh} new entr${fresh === 1 ? 'y' : 'ies'}`;
-    btn.disabled = false;
-  }
+  btn.disabled = fresh === 0;
+  btn.textContent = fresh === 0 ? 'Nothing new to import' : `Import ${fresh} new entr${fresh === 1 ? 'y' : 'ies'}`;
 
   $('#csv-preview-wrap').hidden = false;
   $('#csv-preview-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function clearCSVPreview() {
+function clearImportPreview() {
   pendingImport = null;
   $('#csv-preview-wrap').hidden = true;
   $('#csv-preview-list').innerHTML = '';
-  $('#csv-file').value = '';
+  $('#pdf-file').value = '';
 }
 
-document.getElementById('csv-file').addEventListener('change', async (ev) => {
+document.getElementById('pdf-file').addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
   if (!file) return;
+  const label = $('#pdf-import-label');
+  const original = label.childNodes[0].textContent;
+  label.childNodes[0].textContent = 'Reading PDF…';
   try {
-    const text = await file.text();
-    const parsed = BankImport.parse(text);
-    renderCSVPreview(parsed);
+    const parsed = await PDFImport.parse(file);
+    renderImportPreview(parsed);
   } catch (err) {
-    toast(err.message || 'No se pudo leer el archivo.');
+    toast(err.message || 'No se pudo leer el PDF.');
     ev.target.value = '';
+  } finally {
+    label.childNodes[0].textContent = original;
   }
 });
 
 actions['csv-confirm'] = () => {
   if (!pendingImport) return;
   const toAdd = pendingImport.filter((e) => !isDuplicateEntry(e));
-  if (!toAdd.length) { clearCSVPreview(); return; }
+  if (!toAdd.length) { clearImportPreview(); return; }
   const before = structuredClone(state);
   for (const e of toAdd) {
     state.entries.push({ id: uid(), type: e.type, amount: e.amount, category: e.category, note: e.note, date: e.date, createdAt: Date.now() });
   }
   commit();
-  clearCSVPreview();
+  clearImportPreview();
   toast(`${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'} imported`, () => { state = before; commit(); });
 };
 
-actions['csv-cancel'] = clearCSVPreview;
+actions['csv-cancel'] = clearImportPreview;
 
 /* ---------- Start ---------- */
 
