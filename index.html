@@ -27,6 +27,27 @@
         <h1 id="greeting">Hello</h1>
       </header>
 
+      <article class="card ask-card" id="ask-card" hidden>
+        <div class="ask-head">
+          <span data-icon="spark"></span>
+          <h2>Ask</h2>
+          <span class="muted small" id="ask-model"></span>
+        </div>
+        <div id="ask-setup" hidden>
+          <p class="muted small">Type things like “I spent 120 on lunch” or “remind me to call mom on Friday”, and they get added for you.</p>
+          <button class="btn" data-action="go" data-to="settings">Set up AI</button>
+        </div>
+        <form id="unlock-form" class="ask-row" autocomplete="off" hidden>
+          <input id="unlock-pass" type="password" placeholder="AI password" aria-label="AI password" required>
+          <button class="btn primary" type="submit">Unlock</button>
+        </form>
+        <form id="ask-form" class="ask-row" autocomplete="off" hidden>
+          <input id="ask-text" type="text" maxlength="500" placeholder="Try “I got 200 pesos from my friend”" aria-label="Ask" enterkeyhint="send">
+          <button class="btn primary" type="submit" id="ask-send">Send</button>
+        </form>
+        <div class="ask-reply" id="ask-reply" hidden></div>
+      </article>
+
       <div class="quick">
         <button class="btn primary" data-action="quick-task">＋ Task</button>
         <button class="btn" data-action="quick-expense">＋ Expense</button>
@@ -129,6 +150,34 @@
         </select>
       </article>
 
+      <article class="card" id="ai-settings">
+        <h2>AI assistant</h2>
+        <div id="ai-setup-wrap">
+          <p class="muted small">Uses your own Claude API key from <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> (pay as you go, about 1 cent per command). The key is locked with a password and saved only on this device.</p>
+          <form id="ai-setup-form" autocomplete="off">
+            <label class="field"><span>API key</span><input id="ai-key" type="password" placeholder="sk-ant-..." required></label>
+            <div class="row two">
+              <label class="field"><span>Password (6+ characters)</span><input id="ai-pass" type="password" minlength="6" required autocomplete="new-password"></label>
+              <label class="field"><span>Repeat password</span><input id="ai-pass2" type="password" minlength="6" required autocomplete="new-password"></label>
+            </div>
+            <button class="btn primary block" type="submit">Save key</button>
+          </form>
+        </div>
+        <div id="ai-ready-wrap" hidden>
+          <p class="small" id="ai-status"></p>
+          <div class="row">
+            <button class="btn" data-action="ai-lock" id="ai-lock-btn">Lock now</button>
+            <button class="btn danger" data-action="ai-remove">Remove key</button>
+          </div>
+        </div>
+        <label class="field"><span>Model</span>
+          <select id="ai-model">
+            <option value="claude-opus-5-5">Claude Opus 5.5 · smartest · about 1¢ per command</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 · fastest · much cheaper</option>
+          </select>
+        </label>
+      </article>
+
       <article class="card">
         <h2>Backup</h2>
         <p class="muted small">Your data is saved only on this device. Download a backup now and then so you never lose it.</p>
@@ -159,5 +208,6 @@
 
   <script src="pixels.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="ai.js"></script>
 </body>
 </html>

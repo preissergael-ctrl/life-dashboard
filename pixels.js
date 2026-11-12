@@ -26,6 +26,24 @@ const PIXEL_COLORS = {
 };
 
 const PIXEL_ART = {
+  spark: [
+    '................',
+    '.......kk.......',
+    '......kppk......',
+    '......kppk......',
+    '.....kppppk.....',
+    '....kppppppk....',
+    '.kkkpppPPpppkkk.',
+    'kpppppPPPPpppppk',
+    'kpppppPPPPpppppk',
+    '.kkkpppPPpppkkk.',
+    '....kppppppk....',
+    '.....kppppk.....',
+    '......kppk......',
+    '......kppk......',
+    '.......kk.......',
+    '................',
+  ],
   home: [
     '................',
     '.......kk.......',

@@ -21,7 +21,7 @@ const catIcon = (cat, size = 24) => pixelIcon(CATEGORY_ICON[cat] || 'box', size)
 /* ---------- Saving and loading ---------- */
 
 function emptyState() {
-  return { todos: [], entries: [], settings: { currency: 'MXN' } };
+  return { todos: [], entries: [], settings: { currency: 'MXN', aiModel: 'claude-opus-5-5' } };
 }
 
 function isValidState(s) {
@@ -251,6 +251,7 @@ function render() {
   renderHome();
   renderTasks();
   renderMoney();
+  renderAI();
   $('#currency').value = state.settings.currency;
 }
 
@@ -347,6 +348,16 @@ const actions = {
     undoFn = null;
     $('#toast').classList.remove('show');
   },
+
+  'ai-lock': () => { window.LifeAI?.lock(); renderAI(); toast('AI locked'); },
+
+  'ai-remove': () => {
+    if (!confirm('Remove your saved API key from this device?')) return;
+    window.LifeAI?.removeKey();
+    $('#ask-reply').hidden = true;
+    renderAI();
+    toast('API key removed');
+  },
 };
 
 document.addEventListener('click', (ev) => {
@@ -416,6 +427,136 @@ $('#import-file').addEventListener('change', async (ev) => {
     toast("That file isn't a Life Dashboard backup.");
   }
 });
+
+/* ---------- AI assistant (the API part lives in ai.js) ---------- */
+
+function renderAI() {
+  const ai = window.LifeAI;
+  const status = ai ? ai.status() : 'loading';
+  $('#ask-card').hidden = status === 'loading';
+  $('#ask-setup').hidden = status !== 'none';
+  $('#unlock-form').hidden = status !== 'locked';
+  $('#ask-form').hidden = status !== 'unlocked';
+  $('#ai-setup-wrap').hidden = status !== 'none';
+  $('#ai-ready-wrap').hidden = status === 'none' || status === 'loading';
+  $('#ai-lock-btn').hidden = status !== 'unlocked';
+  $('#ai-status').textContent = status === 'unlocked'
+    ? 'Key saved · unlocked until you close the app.'
+    : 'Key saved · locked. Unlock it from the Ask box on Home.';
+  $('#ai-model').value = state.settings.aiModel || 'claude-opus-5-5';
+  $('#ask-model').textContent = ai?.MODELS[state.settings.aiModel] || '';
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Applies Claude's actions after checking every field. Returns a line describing each change. */
+function applyAIActions(actions) {
+  const changes = [];
+  for (const a of actions) {
+    if (a.kind === 'add_task') {
+      const text = String(a.task_text || '').trim().slice(0, 200);
+      if (!text) continue;
+      const due = ISO_DATE.test(a.due) ? a.due : '';
+      state.todos.push({ id: uid(), text, due, done: false, createdAt: Date.now() });
+      changes.push(`New task: ${text}${due ? ` (${dueInfo({ due }).label})` : ''}`);
+    } else if (a.kind === 'complete_task') {
+      const t = state.todos.find((x) => x.id === a.task_id && !x.done);
+      if (!t) continue;
+      t.done = true;
+      changes.push(`Done: ${t.text}`);
+    } else if (a.kind === 'add_entry') {
+      if (a.entry_type !== 'income' && a.entry_type !== 'expense') continue;
+      const amount = Math.round(Number(a.amount) * 100) / 100;
+      if (!(amount > 0) || amount > 1e9) continue;
+      const category = CATEGORIES[a.entry_type].includes(a.category) ? a.category : 'Other';
+      const note = String(a.note || '').trim().slice(0, 100);
+      const date = ISO_DATE.test(a.date) ? a.date : todayISO();
+      state.entries.push({ id: uid(), type: a.entry_type, amount, category, note, date, createdAt: Date.now() });
+      changes.push(`${a.entry_type === 'income' ? 'Income' : 'Expense'}: ${money(amount)} · ${category}${note ? ` · ${note}` : ''}`);
+    }
+  }
+  return changes;
+}
+
+function showAskReply(text, changes = [], isError = false) {
+  const box = $('#ask-reply');
+  box.hidden = false;
+  box.classList.toggle('error', isError);
+  box.innerHTML = `<p>${esc(text)}</p>${changes.length ? `<ul>${changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}`;
+}
+
+$('#ask-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const input = $('#ask-text');
+  const text = input.value.trim();
+  if (!text || !window.LifeAI) return;
+  const send = $('#ask-send');
+  send.disabled = true;
+  send.textContent = 'Thinking…';
+  try {
+    const today = todayISO();
+    const result = await window.LifeAI.ask(text, state.settings.aiModel, {
+      today,
+      weekday: new Date(today + 'T00:00').toLocaleDateString('en-US', { weekday: 'long' }),
+      currency: state.settings.currency,
+      expenseCategories: CATEGORIES.expense,
+      incomeCategories: CATEGORIES.income,
+      openTasks: sortTodos(state.todos.filter((t) => !t.done)).slice(0, 50).map(({ id, text, due }) => ({ id, text, due })),
+    });
+    const before = structuredClone(state);
+    const changes = applyAIActions(result.actions);
+    if (changes.length) {
+      commit();
+      toast(`${changes.length} change${changes.length === 1 ? '' : 's'} made`, () => { state = before; commit(); });
+    }
+    showAskReply(result.reply || (changes.length ? 'Done!' : 'Nothing to add.'), changes);
+    input.value = '';
+  } catch (err) {
+    showAskReply(err.message || 'Something went wrong.', [], true);
+  } finally {
+    send.disabled = false;
+    send.textContent = 'Send';
+  }
+});
+
+$('#unlock-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const pass = $('#unlock-pass');
+  try {
+    await window.LifeAI.unlock(pass.value);
+    pass.value = '';
+    renderAI();
+    $('#ask-text').focus();
+  } catch (err) {
+    toast(err.message);
+    pass.select();
+  }
+});
+
+$('#ai-setup-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const key = $('#ai-key').value.trim();
+  const pass = $('#ai-pass').value;
+  if (!key.startsWith('sk-ant-')) { toast("That doesn't look like a Claude API key (it starts with sk-ant-)."); return; }
+  if (pass.length < 6) { toast('Use a password with at least 6 characters.'); return; }
+  if (pass !== $('#ai-pass2').value) { toast("The passwords don't match."); return; }
+  try {
+    await window.LifeAI.saveKey(key, pass);
+  } catch {
+    toast('Could not save the key on this device.');
+    return;
+  }
+  $('#ai-setup-form').reset();
+  renderAI();
+  toast('AI is ready. Try it from the Home screen!');
+});
+
+$('#ai-model').addEventListener('change', (ev) => {
+  state.settings.aiModel = ev.target.value;
+  commit();
+});
+
+window.addEventListener('lifeai-ready', renderAI);
 
 /* ---------- Keep in sync ---------- */
 
