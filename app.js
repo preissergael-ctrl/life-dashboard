@@ -1,0 +1,437 @@
+'use strict';
+
+/* =========================================================
+   Life Dashboard: to-do list + money tracker.
+   All data lives in this browser's localStorage.
+   ========================================================= */
+
+const STORAGE_KEY = 'lifedash:v1';
+
+const CATEGORIES = {
+  expense: ['Food', 'Transport', 'School', 'Fun', 'Shopping', 'Bills', 'Health', 'Other'],
+  income: ['Allowance', 'Job', 'Gift', 'Other'],
+};
+// Which pixel-art drawing (in pixels.js) each category uses
+const CATEGORY_ICON = {
+  Food: 'burger', Transport: 'bus', School: 'books', Fun: 'controller', Shopping: 'bag', Bills: 'receipt',
+  Health: 'firstaid', Other: 'box', Allowance: 'banknote', Job: 'briefcase', Gift: 'gift',
+};
+const catIcon = (cat, size = 24) => pixelIcon(CATEGORY_ICON[cat] || 'box', size);
+
+/* ---------- Saving and loading ---------- */
+
+function emptyState() {
+  return { todos: [], entries: [], settings: { currency: 'MXN' } };
+}
+
+function isValidState(s) {
+  return s && Array.isArray(s.todos) && Array.isArray(s.entries);
+}
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (isValidState(saved)) return { ...emptyState(), ...saved, settings: { ...emptyState().settings, ...saved.settings } };
+  } catch { /* storage blocked or corrupt: start fresh */ }
+  return emptyState();
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    toast('Could not save. Storage may be full or blocked.');
+  }
+}
+
+let state = load();
+
+/* ---------- Screen state (not saved) ---------- */
+
+const ui = {
+  view: 'home',
+  taskFilter: 'active',
+  month: monthOf(todayISO()),
+  entryType: 'expense',
+  entryCat: 'Food',
+};
+
+/* ---------- Small helpers ---------- */
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function esc(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function monthOf(iso) { return iso.slice(0, 7); }
+
+function shiftMonth(key, delta) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function daysFromToday(iso) {
+  return Math.round((new Date(iso + 'T00:00') - new Date(todayISO() + 'T00:00')) / 86400000);
+}
+
+function fmtDate(iso, opts = { weekday: 'short', month: 'short', day: 'numeric' }) {
+  return new Date(iso + 'T00:00').toLocaleDateString('en-US', opts);
+}
+
+function fmtMonth(key) {
+  return new Date(key + '-01T00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function money(n) {
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: state.settings.currency || 'MXN' }).format(n);
+}
+
+/* ---------- Tasks logic ---------- */
+
+function sortTodos(list) {
+  const key = (t) => t.due || '9999-12-31'; // tasks without a date go last
+  return [...list].sort((a, b) =>
+    (a.done - b.done) || key(a).localeCompare(key(b)) || (a.createdAt - b.createdAt));
+}
+
+function dueInfo(t) {
+  if (!t.due) return null;
+  if (t.done) return { label: fmtDate(t.due), cls: '' };
+  const days = daysFromToday(t.due);
+  if (days < 0) return { label: `Overdue · ${fmtDate(t.due)}`, cls: 'overdue' };
+  if (days === 0) return { label: 'Today', cls: 'today' };
+  if (days === 1) return { label: 'Tomorrow', cls: '' };
+  return { label: fmtDate(t.due), cls: '' };
+}
+
+function todoHTML(t) {
+  const due = dueInfo(t);
+  return `
+    <li class="todo${t.done ? ' done' : ''}">
+      <label class="check">
+        <input type="checkbox" data-action="toggle-todo" data-id="${t.id}" ${t.done ? 'checked' : ''} aria-label="Mark done">
+        <span></span>
+      </label>
+      <div class="todo-body">
+        <div class="todo-text">${esc(t.text)}</div>
+        ${due ? `<div class="due ${due.cls}">${due.label}</div>` : ''}
+      </div>
+      <button class="icon-btn subtle" data-action="delete-todo" data-id="${t.id}" aria-label="Delete task">✕</button>
+    </li>`;
+}
+
+/* ---------- Money logic ---------- */
+
+function totalsFor(entries) {
+  let income = 0, expense = 0;
+  for (const e of entries) e.type === 'income' ? (income += e.amount) : (expense += e.amount);
+  return { income, expense, balance: income - expense };
+}
+
+function totalsHTML({ income, expense, balance }) {
+  return `
+    <div class="total"><span>Income</span><strong class="pos">${money(income)}</strong></div>
+    <div class="total"><span>Spent</span><strong class="neg">${money(expense)}</strong></div>
+    <div class="total"><span>Balance</span><strong class="${balance < 0 ? 'neg' : ''}">${money(balance)}</strong></div>`;
+}
+
+function spendingByCategory(entries) {
+  const sums = {};
+  for (const e of entries) if (e.type === 'expense') sums[e.category] = (sums[e.category] || 0) + e.amount;
+  return Object.entries(sums).sort((a, b) => b[1] - a[1]);
+}
+
+/* ---------- Rendering ---------- */
+
+function renderHome() {
+  const hour = new Date().getHours();
+  $('#greeting').textContent = hour < 12 ? 'Good morning' : hour < 19 ? 'Good afternoon' : 'Good evening';
+  $('#today-label').textContent = fmtDate(todayISO(), { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const today = todayISO();
+  const open = state.todos.filter((t) => !t.done);
+  const dueToday = open.filter((t) => t.due === today).length;
+  const overdue = open.filter((t) => t.due && t.due < today).length;
+  $('#home-task-stats').innerHTML = `
+    <span class="stat">${open.length} to do</span>
+    <span class="stat ${dueToday ? 'today' : ''}">${dueToday} due today</span>
+    <span class="stat ${overdue ? 'overdue' : ''}">${overdue} overdue</span>`;
+  const next = sortTodos(open).slice(0, 4);
+  $('#home-todos').innerHTML = next.length
+    ? next.map(todoHTML).join('')
+    : `<li class="empty">${pixelIcon('check', 32)}<br>Nothing to do. Nice!</li>`;
+
+  const thisMonth = monthOf(today);
+  const entries = state.entries.filter((e) => monthOf(e.date) === thisMonth);
+  $('#home-month-title').textContent = fmtMonth(thisMonth);
+  $('#home-totals').innerHTML = totalsHTML(totalsFor(entries));
+  const top = spendingByCategory(entries)[0];
+  $('#home-top-cat').innerHTML = top
+    ? `Most spending: <span class="inline-cat">${catIcon(top[0], 18)} ${esc(top[0])}</span> (${money(top[1])})`
+    : 'No spending logged this month yet.';
+}
+
+function renderTasks() {
+  const open = state.todos.filter((t) => !t.done).length;
+  const done = state.todos.length - open;
+  $('#task-count').textContent = `${open} to do · ${done} done`;
+
+  $$('#task-filters .chip').forEach((c) => c.classList.toggle('active', c.dataset.filter === ui.taskFilter));
+
+  const shown = sortTodos(state.todos.filter((t) =>
+    ui.taskFilter === 'all' ? true : ui.taskFilter === 'done' ? t.done : !t.done));
+  const emptyMsg = { active: 'All caught up! Add a task above.', done: 'No completed tasks yet.', all: 'No tasks yet. Add one above.' };
+  $('#todo-list').innerHTML = shown.length ? shown.map(todoHTML).join('') : `<li class="empty">${emptyMsg[ui.taskFilter]}</li>`;
+  $('#clear-done').hidden = done === 0;
+}
+
+function renderCategoryOptions() {
+  const cats = CATEGORIES[ui.entryType];
+  if (!cats.includes(ui.entryCat)) ui.entryCat = cats[0];
+  $('#entry-cats').innerHTML = cats.map((c) => `
+    <button type="button" class="cat${c === ui.entryCat ? ' active' : ''}" role="radio"
+      aria-checked="${c === ui.entryCat}" data-action="pick-cat" data-cat="${c}">
+      ${catIcon(c, 32)}<span>${c}</span>
+    </button>`).join('');
+}
+
+function renderMoney() {
+  $('#month-label').textContent = fmtMonth(ui.month);
+  const entries = state.entries.filter((e) => monthOf(e.date) === ui.month);
+  $('#money-totals').innerHTML = totalsHTML(totalsFor(entries));
+
+  $$('.seg').forEach((b) => b.classList.toggle('active', b.dataset.type === ui.entryType));
+  $('#entry-submit').textContent = ui.entryType === 'expense' ? 'Add expense' : 'Add income';
+
+  const cats = spendingByCategory(entries);
+  const max = cats.length ? cats[0][1] : 0;
+  $('#cat-card').hidden = cats.length === 0;
+  $('#cat-bars').innerHTML = cats.map(([cat, amt]) => `
+    <div class="bar-row">
+      <span class="bar-label">${catIcon(cat, 20)}${esc(cat)}</span>
+      <div class="bar"><div style="width:${Math.max(4, (amt / max) * 100)}%"></div></div>
+      <span class="bar-amt">${money(amt)}</span>
+    </div>`).join('');
+
+  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  if (!sorted.length) {
+    $('#entry-list').innerHTML = `<p class="empty">Nothing logged in ${fmtMonth(ui.month)}.</p>`;
+    return;
+  }
+  let html = '', lastDate = '';
+  for (const e of sorted) {
+    if (e.date !== lastDate) {
+      html += `<div class="date-head">${fmtDate(e.date)}</div>`;
+      lastDate = e.date;
+    }
+    html += `
+      <div class="entry">
+        <span class="entry-ico">${catIcon(e.category, 24)}</span>
+        <div class="entry-body">
+          <div>${esc(e.category)}</div>
+          ${e.note ? `<div class="muted small">${esc(e.note)}</div>` : ''}
+        </div>
+        <strong class="${e.type === 'income' ? 'pos' : 'neg'}">${e.type === 'income' ? '+' : '−'}${money(e.amount)}</strong>
+        <button class="icon-btn subtle" data-action="delete-entry" data-id="${e.id}" aria-label="Delete entry">✕</button>
+      </div>`;
+  }
+  $('#entry-list').innerHTML = html;
+}
+
+function render() {
+  renderHome();
+  renderTasks();
+  renderMoney();
+  $('#currency').value = state.settings.currency;
+}
+
+function showView(name) {
+  ui.view = name;
+  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
+  $$('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.to === name ? 'page' : 'false'));
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Toast with optional Undo ---------- */
+
+let undoFn = null;
+let toastTimer;
+function toast(msg, undo) {
+  const el = $('#toast');
+  el.querySelector('.toast-msg').textContent = msg;
+  el.querySelector('.toast-undo').hidden = !undo;
+  undoFn = undo || null;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); undoFn = null; }, 4500);
+}
+
+function commit() { save(); render(); }
+
+/* ---------- Actions (button clicks) ---------- */
+
+const actions = {
+  go: (el) => showView(el.dataset.to),
+
+  'quick-task': () => { showView('tasks'); $('#todo-text').focus(); },
+  'quick-expense': () => {
+    ui.entryType = 'expense';
+    ui.month = monthOf(todayISO());
+    renderCategoryOptions();
+    renderMoney();
+    showView('money');
+    $('#entry-amount').focus();
+  },
+
+  filter: (el) => { ui.taskFilter = el.dataset.filter; renderTasks(); },
+
+  'delete-todo': (el) => {
+    const i = state.todos.findIndex((t) => t.id === el.dataset.id);
+    if (i < 0) return;
+    const [removed] = state.todos.splice(i, 1);
+    commit();
+    toast('Task deleted', () => { state.todos.splice(i, 0, removed); commit(); });
+  },
+
+  'clear-done': () => {
+    const before = state.todos;
+    const count = before.filter((t) => t.done).length;
+    state.todos = before.filter((t) => !t.done);
+    commit();
+    toast(`Cleared ${count} completed task${count === 1 ? '' : 's'}`, () => { state.todos = before; commit(); });
+  },
+
+  month: (el) => { ui.month = shiftMonth(ui.month, Number(el.dataset.delta)); renderMoney(); },
+
+  'entry-type': (el) => { ui.entryType = el.dataset.type; renderCategoryOptions(); renderMoney(); },
+
+  'pick-cat': (el) => { ui.entryCat = el.dataset.cat; renderCategoryOptions(); },
+
+  'delete-entry': (el) => {
+    const i = state.entries.findIndex((e) => e.id === el.dataset.id);
+    if (i < 0) return;
+    const [removed] = state.entries.splice(i, 1);
+    commit();
+    toast('Entry deleted', () => { state.entries.splice(i, 0, removed); commit(); });
+  },
+
+  export: () => {
+    const data = JSON.stringify({ app: 'life-dashboard', version: 1, exportedAt: new Date().toISOString(), data: state }, null, 2);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    a.download = `life-dashboard-backup-${todayISO()}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Backup downloaded');
+  },
+
+  erase: () => {
+    if (!confirm('Erase ALL tasks and money entries? Download a backup first if you might want them back.')) return;
+    const before = state;
+    state = emptyState();
+    commit();
+    toast('All data erased', () => { state = before; commit(); });
+  },
+
+  undo: () => {
+    if (undoFn) undoFn();
+    undoFn = null;
+    $('#toast').classList.remove('show');
+  },
+};
+
+document.addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-action]');
+  if (!el || el.type === 'checkbox') return;
+  const fn = actions[el.dataset.action];
+  if (fn) fn(el);
+});
+
+document.addEventListener('change', (ev) => {
+  const el = ev.target;
+  if (el.dataset.action === 'toggle-todo') {
+    const t = state.todos.find((x) => x.id === el.dataset.id);
+    if (t) { t.done = el.checked; commit(); }
+  }
+});
+
+/* ---------- Forms ---------- */
+
+$('#todo-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const text = $('#todo-text').value.trim();
+  if (!text) return;
+  state.todos.push({ id: uid(), text, due: $('#todo-due').value || '', done: false, createdAt: Date.now() });
+  if (ui.taskFilter === 'done') ui.taskFilter = 'active';
+  commit();
+  $('#todo-text').value = '';
+  $('#todo-due').value = '';
+  $('#todo-text').focus();
+});
+
+$('#entry-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const amount = Math.round(parseFloat($('#entry-amount').value) * 100) / 100;
+  if (!(amount > 0)) { toast('Enter an amount greater than 0'); return; }
+  const date = $('#entry-date').value || todayISO();
+  state.entries.push({
+    id: uid(), type: ui.entryType, amount, category: ui.entryCat,
+    note: $('#entry-note').value.trim(), date, createdAt: Date.now(),
+  });
+  ui.month = monthOf(date); // jump to the month you just logged
+  commit();
+  $('#entry-amount').value = '';
+  $('#entry-note').value = '';
+  toast(`${ui.entryType === 'expense' ? 'Expense' : 'Income'} of ${money(amount)} added`);
+});
+
+$('#currency').addEventListener('change', (ev) => {
+  state.settings.currency = ev.target.value;
+  commit();
+});
+
+$('#import-file').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const data = parsed.data || parsed;
+    if (!isValidState(data)) throw new Error('bad file');
+    if (!confirm(`Replace your current data with this backup (${data.todos.length} tasks, ${data.entries.length} entries)?`)) return;
+    const before = state;
+    state = { ...emptyState(), ...data, settings: { ...emptyState().settings, ...data.settings } };
+    commit();
+    toast('Backup restored', () => { state = before; commit(); });
+  } catch {
+    toast("That file isn't a Life Dashboard backup.");
+  }
+});
+
+/* ---------- Keep in sync ---------- */
+
+// Another tab changed the data
+window.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) { state = load(); render(); } });
+// Coming back to the app (e.g. the next day): refresh "today" labels
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+/* ---------- Start ---------- */
+
+$('#entry-date').value = todayISO();
+$$('[data-icon]').forEach((el) => { el.innerHTML = pixelIcon(el.dataset.icon, 26); });
+renderCategoryOptions();
+render();
+showView('home');
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('./sw.js').catch(() => { /* offline mode unavailable */ });
+}

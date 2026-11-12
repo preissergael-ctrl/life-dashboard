@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Life Dashboard</title>
+  <meta name="description" content="My to-do list and money tracker">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preload" href="fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/dm-sans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Life">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- ============ HOME ============ -->
+    <section class="view" data-view="home">
+      <header class="page-head">
+        <p class="eyebrow" id="today-label"></p>
+        <h1 id="greeting">Hello</h1>
+      </header>
+
+      <div class="quick">
+        <button class="btn primary" data-action="quick-task">＋ Task</button>
+        <button class="btn" data-action="quick-expense">＋ Expense</button>
+      </div>
+
+      <article class="card">
+        <div class="card-head">
+          <h2>Tasks</h2>
+          <button class="link" data-action="go" data-to="tasks">See all</button>
+        </div>
+        <div class="stats" id="home-task-stats"></div>
+        <ul class="todo-list" id="home-todos"></ul>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2 id="home-month-title">This month</h2>
+          <button class="link" data-action="go" data-to="money">Details</button>
+        </div>
+        <div class="totals" id="home-totals"></div>
+        <p class="muted small" id="home-top-cat"></p>
+      </article>
+    </section>
+
+    <!-- ============ TASKS ============ -->
+    <section class="view" data-view="tasks" hidden>
+      <header class="page-head">
+        <h1>Tasks</h1>
+        <p class="muted" id="task-count"></p>
+      </header>
+
+      <form id="todo-form" class="card form" autocomplete="off">
+        <input id="todo-text" type="text" placeholder="What do you need to do?" maxlength="200" required aria-label="Task">
+        <div class="row">
+          <label class="field"><span>Due date (optional)</span><input id="todo-due" type="date"></label>
+          <button class="btn primary" type="submit">Add task</button>
+        </div>
+      </form>
+
+      <div class="chips" id="task-filters">
+        <button class="chip" data-action="filter" data-filter="active">To do</button>
+        <button class="chip" data-action="filter" data-filter="done">Done</button>
+        <button class="chip" data-action="filter" data-filter="all">All</button>
+      </div>
+
+      <ul class="todo-list card" id="todo-list"></ul>
+      <button class="link danger" id="clear-done" data-action="clear-done" hidden>Clear completed tasks</button>
+    </section>
+
+    <!-- ============ MONEY ============ -->
+    <section class="view" data-view="money" hidden>
+      <header class="page-head month-head">
+        <button class="icon-btn" data-action="month" data-delta="-1" aria-label="Previous month">‹</button>
+        <h1 id="month-label"></h1>
+        <button class="icon-btn" data-action="month" data-delta="1" aria-label="Next month">›</button>
+      </header>
+
+      <div class="totals" id="money-totals"></div>
+
+      <form id="entry-form" class="card form" autocomplete="off">
+        <div class="segmented" role="group" aria-label="Entry type">
+          <button type="button" class="seg" data-action="entry-type" data-type="expense">Expense</button>
+          <button type="button" class="seg" data-action="entry-type" data-type="income">Income</button>
+        </div>
+        <div class="row two">
+          <label class="field"><span>Amount</span>
+            <input id="entry-amount" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="0.00" required>
+          </label>
+          <label class="field"><span>Date</span><input id="entry-date" type="date" required></label>
+        </div>
+        <div class="field">
+          <span id="cat-label">Category</span>
+          <div class="cat-grid" id="entry-cats" role="radiogroup" aria-labelledby="cat-label"></div>
+        </div>
+        <label class="field"><span>Note</span><input id="entry-note" type="text" maxlength="100" placeholder="Optional"></label>
+        <button class="btn primary block" type="submit" id="entry-submit">Add expense</button>
+      </form>
+
+      <article class="card" id="cat-card">
+        <h2>Spending by category</h2>
+        <div id="cat-bars"></div>
+      </article>
+
+      <article class="card">
+        <h2>Entries</h2>
+        <div id="entry-list"></div>
+      </article>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="view" data-view="settings" hidden>
+      <header class="page-head"><h1>Settings</h1></header>
+
+      <article class="card">
+        <h2>Currency</h2>
+        <select id="currency" aria-label="Currency">
+          <option value="MXN">MXN · Mexican peso</option>
+          <option value="USD">USD · US dollar</option>
+          <option value="EUR">EUR · Euro</option>
+        </select>
+      </article>
+
+      <article class="card">
+        <h2>Backup</h2>
+        <p class="muted small">Your data is saved only on this device. Download a backup now and then so you never lose it.</p>
+        <div class="row">
+          <button class="btn" data-action="export">Download backup</button>
+          <label class="btn">Restore backup<input type="file" id="import-file" accept="application/json,.json" hidden></label>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Danger zone</h2>
+        <button class="btn danger" data-action="erase">Erase all data</button>
+      </article>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button class="tab" data-action="go" data-to="home"><span class="tab-ico" data-icon="home"></span>Home</button>
+    <button class="tab" data-action="go" data-to="tasks"><span class="tab-ico" data-icon="check"></span>Tasks</button>
+    <button class="tab" data-action="go" data-to="money"><span class="tab-ico" data-icon="coin"></span>Money</button>
+    <button class="tab" data-action="go" data-to="settings"><span class="tab-ico" data-icon="gear"></span>Settings</button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span class="toast-msg"></span>
+    <button class="toast-undo" data-action="undo" hidden>Undo</button>
+  </div>
+
+  <script src="pixels.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
