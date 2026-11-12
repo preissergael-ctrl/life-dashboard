@@ -3,7 +3,7 @@
 // fall back to the saved copy when offline.
 const CACHE = 'lifedash-v3';
 const APP_FILES = [
-  './', './index.html', './styles.css', './pixels.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
+  './', './index.html', './styles.css', './pixels.js', './csv-import.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
   './manifest.webmanifest',
   './fonts/fraunces.woff2', './fonts/dm-sans.woff2',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',

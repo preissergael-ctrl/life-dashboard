@@ -565,6 +565,96 @@ window.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) { state
 // Coming back to the app (e.g. the next day): refresh "today" labels
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
+/* ---------- CSV bank import ---------- */
+
+let pendingImport = null; // entries waiting for user confirmation
+
+function isDuplicateEntry(e) {
+  return state.entries.some((x) => x.date === e.date && x.amount === e.amount && x.type === e.type);
+}
+
+function renderCSVPreview(parsed) {
+  const { entries, skipped } = parsed;
+  const dupes = entries.filter(isDuplicateEntry).length;
+  const fresh = entries.length - dupes;
+
+  pendingImport = entries;
+
+  $('#csv-preview-title').textContent = `${entries.length} transaction${entries.length === 1 ? '' : 's'} found`;
+
+  let summary = `${fresh} new`;
+  if (dupes)   summary += ` · ${dupes} already in app (will be skipped)`;
+  if (skipped) summary += ` · ${skipped} rows skipped`;
+  $('#csv-preview-summary').textContent = summary;
+
+  const MAX_SHOWN = 40;
+  const shown = entries.slice(0, MAX_SHOWN);
+  let html = '';
+  for (const e of shown) {
+    const dup = isDuplicateEntry(e);
+    html += `
+      <div class="entry${dup ? ' csv-dup' : ''}">
+        <span class="entry-ico">${catIcon(e.category, 24)}</span>
+        <div class="entry-body">
+          <div>${esc(e.description.slice(0, 60) || e.category)}</div>
+          <div class="muted small">${fmtDate(e.date)} · ${esc(e.category)}${dup ? ' · already in app' : ''}</div>
+        </div>
+        <strong class="${e.type === 'income' ? 'pos' : 'neg'}">${e.type === 'income' ? '+' : '−'}${money(e.amount)}</strong>
+      </div>`;
+  }
+  if (entries.length > MAX_SHOWN) {
+    html += `<p class="muted small" style="text-align:center;padding:10px 0">…and ${entries.length - MAX_SHOWN} more</p>`;
+  }
+  $('#csv-preview-list').innerHTML = html;
+
+  const btn = $('#csv-import-btn');
+  if (fresh === 0) {
+    btn.textContent = 'Nothing new to import';
+    btn.disabled = true;
+  } else {
+    btn.textContent = `Import ${fresh} new entr${fresh === 1 ? 'y' : 'ies'}`;
+    btn.disabled = false;
+  }
+
+  $('#csv-preview-wrap').hidden = false;
+  $('#csv-preview-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearCSVPreview() {
+  pendingImport = null;
+  $('#csv-preview-wrap').hidden = true;
+  $('#csv-preview-list').innerHTML = '';
+  $('#csv-file').value = '';
+}
+
+document.getElementById('csv-file').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = BankImport.parse(text);
+    renderCSVPreview(parsed);
+  } catch (err) {
+    toast(err.message || 'No se pudo leer el archivo.');
+    ev.target.value = '';
+  }
+});
+
+actions['csv-confirm'] = () => {
+  if (!pendingImport) return;
+  const toAdd = pendingImport.filter((e) => !isDuplicateEntry(e));
+  if (!toAdd.length) { clearCSVPreview(); return; }
+  const before = structuredClone(state);
+  for (const e of toAdd) {
+    state.entries.push({ id: uid(), type: e.type, amount: e.amount, category: e.category, note: e.note, date: e.date, createdAt: Date.now() });
+  }
+  commit();
+  clearCSVPreview();
+  toast(`${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'} imported`, () => { state = before; commit(); });
+};
+
+actions['csv-cancel'] = clearCSVPreview;
+
 /* ---------- Start ---------- */
 
 $('#entry-date').value = todayISO();

@@ -179,6 +179,24 @@
       </article>
 
       <article class="card">
+        <h2>Import from Plata</h2>
+        <p class="muted small">Download your statement as CSV from the Plata app, then import it here. Transactions are matched to categories automatically.</p>
+        <label class="btn" id="csv-import-label">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label>
+      </article>
+
+      <div id="csv-preview-wrap" hidden>
+        <article class="card">
+          <div class="card-head">
+            <h2 id="csv-preview-title">Preview</h2>
+            <button class="link" data-action="csv-cancel">Cancel</button>
+          </div>
+          <p class="muted small" id="csv-preview-summary"></p>
+          <div id="csv-preview-list"></div>
+          <button class="btn primary block" id="csv-import-btn" data-action="csv-confirm">Import</button>
+        </article>
+      </div>
+
+      <article class="card">
         <h2>Backup</h2>
         <p class="muted small">Your data is saved only on this device. Download a backup now and then so you never lose it.</p>
         <div class="row">
@@ -207,6 +225,7 @@
   </div>
 
   <script src="pixels.js"></script>
+  <script src="csv-import.js"></script>
   <script src="app.js"></script>
   <script type="module" src="ai.js"></script>
 </body>

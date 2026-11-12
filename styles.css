@@ -250,6 +250,10 @@ input:focus-visible { outline: none; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast-undo { background: none; border: 0; color: #b9b5ff; font-weight: 700; cursor: pointer; padding: 4px; }
 
+/* ---------- CSV import preview ---------- */
+.csv-dup { opacity: .4; }
+.csv-dup strong { text-decoration: line-through; }
+
 @media (max-width: 380px) {
   .bar-row { grid-template-columns: 96px 1fr auto; }
   .total strong { font-size: .92rem; }
