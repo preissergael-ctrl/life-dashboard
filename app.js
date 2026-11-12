@@ -573,8 +573,7 @@ function isDuplicateEntry(e) {
   return state.entries.some((x) => x.date === e.date && x.amount === e.amount && x.type === e.type);
 }
 
-function renderImportPreview(parsed) {
-  const { entries, skipped } = parsed;
+function renderImportPreview({ entries, payments, files, errors }) {
   const dupes = entries.filter(isDuplicateEntry).length;
   const fresh = entries.length - dupes;
 
@@ -582,15 +581,14 @@ function renderImportPreview(parsed) {
 
   $('#csv-preview-title').textContent = `${entries.length} transaction${entries.length === 1 ? '' : 's'} found`;
 
-  let summary = `${fresh} new`;
-  if (dupes)   summary += ` · ${dupes} already in app (will be skipped)`;
-  if (skipped) summary += ` · ${skipped} rows skipped`;
-  $('#csv-preview-summary').textContent = summary;
+  const parts = [`From ${files} file${files === 1 ? '' : 's'}`, `${fresh} new`];
+  if (dupes)    parts.push(`${dupes} already in app (will be skipped)`);
+  if (payments) parts.push(`${payments} card payment${payments === 1 ? '' : 's'} skipped`);
+  $('#csv-preview-summary').textContent = parts.join(' · ');
 
-  const MAX_SHOWN = 40;
-  const shown = entries.slice(0, MAX_SHOWN);
-  let html = '';
-  for (const e of shown) {
+  let html = errors.map((msg) => `<p class="small neg">${esc(msg)}</p>`).join('');
+  const MAX_SHOWN = 60;
+  for (const e of entries.slice(0, MAX_SHOWN)) {
     const dup = isDuplicateEntry(e);
     html += `
       <div class="entry${dup ? ' csv-dup' : ''}">
@@ -624,20 +622,39 @@ function clearImportPreview() {
 
 // `?.` = if the button is missing (e.g. an old cached page), skip instead of crashing the whole app
 document.getElementById('pdf-file')?.addEventListener('change', async (ev) => {
-  const file = ev.target.files[0];
-  if (!file) return;
+  const files = [...ev.target.files];
+  if (!files.length) return;
   const label = $('#pdf-import-label');
   const original = label.childNodes[0].textContent;
-  label.childNodes[0].textContent = 'Reading PDF…';
-  try {
-    const parsed = await PDFImport.parse(file);
-    renderImportPreview(parsed);
-  } catch (err) {
-    toast(err.message || 'Could not read that PDF.');
-    ev.target.value = '';
-  } finally {
-    label.childNodes[0].textContent = original;
+
+  const entries = [];
+  const seen = new Set(); // the same statement picked twice shouldn't double up
+  const errors = [];
+  let payments = 0, ok = 0;
+
+  for (const [i, file] of files.entries()) {
+    label.childNodes[0].textContent = files.length > 1 ? `Reading ${i + 1} of ${files.length}…` : 'Reading PDF…';
+    try {
+      const parsed = await PDFImport.parse(file);
+      ok++;
+      payments += parsed.payments;
+      for (const e of parsed.entries) {
+        const key = `${e.date}|${e.amount}|${e.type}|${e.description}`;
+        if (!seen.has(key)) { seen.add(key); entries.push(e); }
+      }
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message || 'could not read it.'}`);
+    }
   }
+  label.childNodes[0].textContent = original;
+
+  if (!ok) {
+    toast(errors.length === 1 ? errors[0] : `None of the ${files.length} files could be read.`);
+    ev.target.value = '';
+    return;
+  }
+  entries.sort((a, b) => a.date.localeCompare(b.date));
+  renderImportPreview({ entries, payments, files: files.length, errors });
 });
 
 actions['csv-confirm'] = () => {
