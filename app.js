@@ -54,6 +54,7 @@ const ui = {
   month: monthOf(todayISO()),
   entryType: 'expense',
   entryCat: 'Food',
+  openCat: null, // category opened in "Spending by category"
 };
 
 /* ---------- Small helpers ---------- */
@@ -215,12 +216,33 @@ function renderMoney() {
   const cats = spendingByCategory(entries);
   const max = cats.length ? cats[0][1] : 0;
   $('#cat-card').hidden = cats.length === 0;
-  $('#cat-bars').innerHTML = cats.map(([cat, amt]) => `
-    <div class="bar-row">
+  $('#cat-bars').innerHTML = cats.map(([cat, amt]) => {
+    const open = ui.openCat === cat;
+    let list = '';
+    if (open) {
+      const items = entries
+        .filter((e) => e.type === 'expense' && e.category === cat)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+      list = `<div class="cat-detail">
+        <p class="muted small">${items.length} transaction${items.length === 1 ? '' : 's'} in ${fmtMonth(ui.month)}</p>
+        ${items.map((e) => `
+          <div class="entry">
+            <div class="entry-body">
+              <div>${esc(e.note || cat)}</div>
+              <div class="muted small">${fmtDate(e.date)}</div>
+            </div>
+            <strong class="neg">−${money(e.amount)}</strong>
+          </div>`).join('')}
+      </div>`;
+    }
+    return `
+    <button class="bar-row" data-action="toggle-cat" data-cat="${esc(cat)}" aria-expanded="${open}">
       <span class="bar-label">${catIcon(cat, 20)}${esc(cat)}</span>
-      <div class="bar"><div style="width:${Math.max(4, (amt / max) * 100)}%"></div></div>
+      <span class="bar"><span style="width:${Math.max(4, (amt / max) * 100)}%"></span></span>
       <span class="bar-amt">${money(amt)}</span>
-    </div>`).join('');
+      <span class="bar-chev" aria-hidden="true">›</span>
+    </button>${list}`;
+  }).join('');
 
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
   if (!sorted.length) {
@@ -315,6 +337,7 @@ const actions = {
 
   'entry-type': (el) => { ui.entryType = el.dataset.type; renderCategoryOptions(); renderMoney(); },
 
+  'toggle-cat': (el) => { ui.openCat = ui.openCat === el.dataset.cat ? null : el.dataset.cat; renderMoney(); },
   'pick-cat': (el) => { ui.entryCat = el.dataset.cat; renderCategoryOptions(); },
 
   'delete-entry': (el) => {
