@@ -219,6 +219,16 @@
     <button class="tab" data-action="go" data-to="settings"><span class="tab-ico" data-icon="gear"></span>Settings</button>
   </nav>
 
+  <dialog id="cat-sheet" class="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-inner">
+      <h2 id="sheet-title">Change category</h2>
+      <p class="muted small" id="sheet-sub"></p>
+      <div class="cat-grid" id="sheet-cats"></div>
+      <label class="sheet-all" id="sheet-all-wrap" hidden><input type="checkbox" id="sheet-all"> <span id="sheet-all-label"></span></label>
+      <button class="btn block" data-action="sheet-close">Cancel</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite">
     <span class="toast-msg"></span>
     <button class="toast-undo" data-action="undo" hidden>Undo</button>

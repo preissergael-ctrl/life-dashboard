@@ -226,13 +226,13 @@ function renderMoney() {
       list = `<div class="cat-detail">
         <p class="muted small">${items.length} transaction${items.length === 1 ? '' : 's'} in ${fmtMonth(ui.month)}</p>
         ${items.map((e) => `
-          <div class="entry">
-            <div class="entry-body">
-              <div>${esc(e.note || cat)}</div>
-              <div class="muted small">${fmtDate(e.date)}</div>
-            </div>
+          <button class="entry entry-tap" data-action="edit-cat" data-id="${e.id}">
+            <span class="entry-body">
+              <span>${esc(e.note || cat)}</span>
+              <span class="muted small">${fmtDate(e.date)} · tap to change category</span>
+            </span>
             <strong class="neg">−${money(e.amount)}</strong>
-          </div>`).join('')}
+          </button>`).join('')}
       </div>`;
     }
     return `
@@ -257,11 +257,13 @@ function renderMoney() {
     }
     html += `
       <div class="entry">
-        <span class="entry-ico">${catIcon(e.category, 24)}</span>
-        <div class="entry-body">
-          <div>${esc(e.category)}</div>
-          ${e.note ? `<div class="muted small">${esc(e.note)}</div>` : ''}
-        </div>
+        <button class="entry-tap" data-action="edit-cat" data-id="${e.id}" aria-label="Change category of this entry">
+          <span class="entry-ico">${catIcon(e.category, 24)}</span>
+          <span class="entry-body">
+            <span class="entry-cat">${esc(e.category)} <span class="edit-hint" aria-hidden="true"></span></span>
+            ${e.note ? `<span class="muted small">${esc(e.note)}</span>` : ''}
+          </span>
+        </button>
         <strong class="${e.type === 'income' ? 'pos' : 'neg'}">${e.type === 'income' ? '+' : '−'}${money(e.amount)}</strong>
         <button class="icon-btn subtle" data-action="delete-entry" data-id="${e.id}" aria-label="Delete entry">✕</button>
       </div>`;
@@ -339,6 +341,10 @@ const actions = {
 
   'toggle-cat': (el) => { ui.openCat = ui.openCat === el.dataset.cat ? null : el.dataset.cat; renderMoney(); },
   'pick-cat': (el) => { ui.entryCat = el.dataset.cat; renderCategoryOptions(); },
+
+  'edit-cat': (el) => openCatSheet(el.dataset.id),
+  'sheet-cat': (el) => changeCategory(el.dataset.cat),
+  'sheet-close': () => $('#cat-sheet').close(),
 
   'delete-entry': (el) => {
     const i = state.entries.findIndex((e) => e.id === el.dataset.id);
@@ -694,6 +700,50 @@ actions['csv-confirm'] = () => {
 };
 
 actions['csv-cancel'] = clearImportPreview;
+
+/* ---------- Change an entry's category ---------- */
+
+let sheetEntryId = null;
+
+// Other entries from the same merchant (same note + type), so they can be moved together
+function sameMerchant(entry) {
+  if (!entry.note) return [];
+  const key = entry.note.trim().toLowerCase();
+  return state.entries.filter((x) => x.id !== entry.id && x.type === entry.type && (x.note || '').trim().toLowerCase() === key);
+}
+
+function openCatSheet(id) {
+  const e = state.entries.find((x) => x.id === id);
+  const sheet = $('#cat-sheet');
+  if (!e || !sheet.showModal) return;
+  sheetEntryId = id;
+  $('#sheet-sub').textContent = `${e.note || e.category} · ${e.type === 'income' ? '+' : '−'}${money(e.amount)} · ${fmtDate(e.date)}`;
+  $('#sheet-cats').innerHTML = CATEGORIES[e.type].map((c) => `
+    <button type="button" class="cat${c === e.category ? ' active' : ''}" data-action="sheet-cat" data-cat="${c}">
+      ${catIcon(c, 32)}<span>${c}</span>
+    </button>`).join('');
+  const others = sameMerchant(e);
+  $('#sheet-all-wrap').hidden = others.length === 0;
+  $('#sheet-all').checked = false;
+  $('#sheet-all-label').textContent = `Also change the other ${others.length} “${e.note}” entr${others.length === 1 ? 'y' : 'ies'}`;
+  sheet.showModal();
+}
+
+function changeCategory(cat) {
+  const e = state.entries.find((x) => x.id === sheetEntryId);
+  $('#cat-sheet').close();
+  if (!e) return;
+  const targets = [e, ...($('#sheet-all').checked ? sameMerchant(e) : [])].filter((x) => x.category !== cat);
+  if (!targets.length) return;
+  const before = targets.map((x) => [x, x.category]);
+  for (const x of targets) x.category = cat;
+  commit();
+  toast(targets.length === 1 ? `Moved to ${cat}` : `${targets.length} entries moved to ${cat}`,
+    () => { for (const [x, old] of before) x.category = old; commit(); });
+}
+
+// Tap the dark area outside the sheet to close it
+$('#cat-sheet')?.addEventListener('click', (ev) => { if (ev.target.id === 'cat-sheet') ev.target.close(); });
 
 /* ---------- Start ---------- */
 

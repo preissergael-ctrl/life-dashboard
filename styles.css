@@ -229,6 +229,31 @@ input:focus-visible { outline: none; }
 .entry-body { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .entry strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Tap an entry to change its category */
+.entry-tap {
+  display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0;
+  background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.entry-tap:active { opacity: .6; }
+.entry-tap .entry-body { display: flex; flex-direction: column; }
+button.entry.entry-tap { width: 100%; padding: 8px 0; border-bottom: 1px solid var(--line); }
+button.entry.entry-tap:last-child { border-bottom: 0; }
+.edit-hint { display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 5px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); }
+
+/* Bottom sheet */
+.sheet {
+  border: 0; padding: 0; width: 100%; max-width: 520px;
+  margin: auto auto 0; border-radius: 22px 22px 0 0;
+  background: var(--card); color: var(--text);
+}
+.sheet::backdrop { background: rgba(20, 20, 40, .35); }
+.sheet-inner { padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); }
+.sheet-inner h2 { margin: 0 0 2px; }
+.sheet-inner #sheet-sub { margin: 0 0 14px; overflow-wrap: anywhere; }
+.sheet-all { display: flex; gap: 10px; align-items: center; margin-top: 14px; font-size: .9rem; }
+.sheet-all input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+
 /* ---------- Bottom tab bar ---------- */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;

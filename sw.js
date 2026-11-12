@@ -1,7 +1,7 @@
 // Service worker: lets the app open with no internet.
 // Strategy: try the network first (so you always get the newest version),
 // fall back to the saved copy when offline.
-const CACHE = 'lifedash-v7';
+const CACHE = 'lifedash-v8';
 const APP_FILES = [
   './', './index.html', './styles.css', './pixels.js', './pdf-import.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
   './manifest.webmanifest',
