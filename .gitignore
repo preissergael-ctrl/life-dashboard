@@ -1,3 +1,7 @@
 desktop.ini
 Thumbs.db
 *.log
+
+# Cloudflare tool cache
+.wrangler/
+node_modules/

@@ -82,7 +82,8 @@
       <form id="todo-form" class="card form" autocomplete="off">
         <input id="todo-text" type="text" placeholder="What do you need to do?" maxlength="200" required aria-label="Task">
         <div class="row">
-          <label class="field"><span>Due date (optional)</span><input id="todo-due" type="date"></label>
+          <label class="field grow"><span>Due date (optional)</span><input id="todo-due" type="date"></label>
+          <label class="field"><span>Time 🔔</span><input id="todo-time" type="time"></label>
           <button class="btn primary" type="submit">Add task</button>
         </div>
       </form>
@@ -148,6 +149,22 @@
           <option value="USD">USD · US dollar</option>
           <option value="EUR">EUR · Euro</option>
         </select>
+      </article>
+
+      <article class="card" id="notify-card">
+        <h2>Notifications</h2>
+        <p class="muted small" id="notify-status"></p>
+        <div id="notify-off-wrap">
+          <button class="btn primary block" id="notify-on-btn" data-action="notify-on">Turn on notifications</button>
+        </div>
+        <div id="notify-on-wrap" hidden>
+          <label class="toggle-row"><input type="checkbox" id="notify-summary"> <span>Daily summary at</span> <input type="time" id="notify-time" class="mini-time"></label>
+          <label class="toggle-row"><input type="checkbox" id="notify-hide"> <span>Hide task names in notifications</span></label>
+          <div class="row" style="margin-top:14px">
+            <button class="btn" data-action="notify-test">Send a test</button>
+            <button class="btn danger" data-action="notify-off">Turn off</button>
+          </div>
+        </div>
       </article>
 
       <article class="card" id="ai-settings">
@@ -236,6 +253,7 @@
 
   <script src="pixels.js"></script>
   <script src="pdf-import.js"></script>
+  <script src="push.js"></script>
   <script src="app.js"></script>
   <script type="module" src="ai.js"></script>
 </body>

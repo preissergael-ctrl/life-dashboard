@@ -109,7 +109,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- Form fields ---------- */
 .form > input[type="text"] { width: 100%; margin-bottom: 10px; }
-input[type="text"], input[type="number"], input[type="date"], select {
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], select {
   min-height: 46px; padding: 8px 12px;
   border-radius: 12px; border: 1px solid transparent;
   background: var(--soft); width: 100%;
@@ -254,6 +254,11 @@ button.entry.entry-tap:last-child { border-bottom: 0; }
 .sheet-inner #sheet-sub { margin: 0 0 14px; overflow-wrap: anywhere; }
 .sheet-all { display: flex; gap: 10px; align-items: center; margin-top: 14px; font-size: .9rem; }
 .sheet-all input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+
+/* Notification settings */
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: .92rem; flex-wrap: wrap; }
+.toggle-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; margin: 0; }
+input.mini-time { width: auto; padding: 6px 10px; min-height: 0; }
 
 /* ---------- Bottom tab bar ---------- */
 .tabbar {

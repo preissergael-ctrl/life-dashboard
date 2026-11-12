@@ -99,19 +99,21 @@ function money(n) {
 /* ---------- Tasks logic ---------- */
 
 function sortTodos(list) {
-  const key = (t) => t.due || '9999-12-31'; // tasks without a date go last
+  const key = (t) => (t.due || '9999-12-31') + (t.time || '99:99'); // tasks without a date go last
   return [...list].sort((a, b) =>
     (a.done - b.done) || key(a).localeCompare(key(b)) || (a.createdAt - b.createdAt));
 }
 
 function dueInfo(t) {
   if (!t.due) return null;
-  if (t.done) return { label: fmtDate(t.due), cls: '' };
+  const at = t.time ? ` · ${PushReminders.timeLabel(t.time)}` : '';
+  const bell = t.time && !t.done ? ' 🔔' : '';
+  if (t.done) return { label: fmtDate(t.due) + at, cls: '' };
   const days = daysFromToday(t.due);
-  if (days < 0) return { label: `Overdue · ${fmtDate(t.due)}`, cls: 'overdue' };
-  if (days === 0) return { label: 'Today', cls: 'today' };
-  if (days === 1) return { label: 'Tomorrow', cls: '' };
-  return { label: fmtDate(t.due), cls: '' };
+  if (days < 0) return { label: `Overdue · ${fmtDate(t.due)}${at}`, cls: 'overdue' };
+  if (days === 0) return { label: `Today${at}${bell}`, cls: 'today' };
+  if (days === 1) return { label: `Tomorrow${at}${bell}`, cls: '' };
+  return { label: fmtDate(t.due) + at + bell, cls: '' };
 }
 
 function todoHTML(t) {
@@ -276,6 +278,8 @@ function render() {
   renderTasks();
   renderMoney();
   renderAI();
+  renderNotify();
+  updateBadge();
   $('#currency').value = state.settings.currency;
 }
 
@@ -300,7 +304,7 @@ function toast(msg, undo) {
   toastTimer = setTimeout(() => { el.classList.remove('show'); undoFn = null; }, 4500);
 }
 
-function commit() { save(); render(); }
+function commit() { save(); render(); PushReminders.schedule(); }
 
 /* ---------- Actions (button clicks) ---------- */
 
@@ -343,6 +347,28 @@ const actions = {
   'pick-cat': (el) => { ui.entryCat = el.dataset.cat; renderCategoryOptions(); },
 
   'edit-cat': (el) => openCatSheet(el.dataset.id),
+
+  'notify-on': async (el) => {
+    el.disabled = true;
+    try {
+      await PushReminders.enable();
+      renderNotify();
+      toast('Notifications on');
+    } catch (err) {
+      toast(err.message || 'Could not turn on notifications.');
+    } finally { el.disabled = false; }
+  },
+  'notify-off': async () => {
+    await PushReminders.disable();
+    renderNotify();
+    toast('Notifications off');
+  },
+  'notify-test': async (el) => {
+    el.disabled = true;
+    try { await PushReminders.test(); toast('Test sent. It should arrive in a few seconds.'); }
+    catch (err) { toast(`Test failed: ${err.message}`); }
+    finally { el.disabled = false; }
+  },
   'sheet-cat': (el) => changeCategory(el.dataset.cat),
   'sheet-close': () => $('#cat-sheet').close(),
 
@@ -410,11 +436,14 @@ $('#todo-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const text = $('#todo-text').value.trim();
   if (!text) return;
-  state.todos.push({ id: uid(), text, due: $('#todo-due').value || '', done: false, createdAt: Date.now() });
+  const time = $('#todo-time').value || '';
+  const due = $('#todo-due').value || (time ? todayISO() : ''); // a time with no date means today
+  state.todos.push({ id: uid(), text, due, time, done: false, createdAt: Date.now() });
   if (ui.taskFilter === 'done') ui.taskFilter = 'active';
   commit();
   $('#todo-text').value = '';
   $('#todo-due').value = '';
+  $('#todo-time').value = '';
   $('#todo-text').focus();
 });
 
@@ -485,9 +514,10 @@ function applyAIActions(actions) {
     if (a.kind === 'add_task') {
       const text = String(a.task_text || '').trim().slice(0, 200);
       if (!text) continue;
-      const due = ISO_DATE.test(a.due) ? a.due : '';
-      state.todos.push({ id: uid(), text, due, done: false, createdAt: Date.now() });
-      changes.push(`New task: ${text}${due ? ` (${dueInfo({ due }).label})` : ''}`);
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(a.due_time) ? a.due_time : '';
+      const due = ISO_DATE.test(a.due) ? a.due : (time ? todayISO() : '');
+      state.todos.push({ id: uid(), text, due, time, done: false, createdAt: Date.now() });
+      changes.push(`New task: ${text}${due ? ` (${dueInfo({ due, time }).label})` : ''}`);
     } else if (a.kind === 'complete_task') {
       const t = state.todos.find((x) => x.id === a.task_id && !x.done);
       if (!t) continue;
@@ -530,7 +560,7 @@ $('#ask-form').addEventListener('submit', async (ev) => {
       currency: state.settings.currency,
       expenseCategories: CATEGORIES.expense,
       incomeCategories: CATEGORIES.income,
-      openTasks: sortTodos(state.todos.filter((t) => !t.done)).slice(0, 50).map(({ id, text, due }) => ({ id, text, due })),
+      openTasks: sortTodos(state.todos.filter((t) => !t.done)).slice(0, 50).map(({ id, text, due, time }) => ({ id, text, due, time: time || '' })),
     });
     const before = structuredClone(state);
     const changes = applyAIActions(result.actions);
@@ -701,6 +731,38 @@ actions['csv-confirm'] = () => {
 
 actions['csv-cancel'] = clearImportPreview;
 
+/* ---------- Notifications ---------- */
+
+function renderNotify() {
+  const st = PushReminders.status();
+  const msg = {
+    unsupported: 'This browser can’t show notifications. Open the app from your home screen.',
+    blocked: 'Notifications are blocked. Allow them in your phone’s settings for this app, then come back.',
+    off: 'Get a notification when a task with a time is due, plus a daily summary of your tasks.',
+    on: 'On. Tasks with a time ring at that time 🔔',
+  }[st];
+  $('#notify-status').textContent = msg;
+  $('#notify-off-wrap').hidden = st === 'on' || st === 'unsupported';
+  $('#notify-on-wrap').hidden = st !== 'on';
+  $('#notify-on-btn').disabled = st === 'blocked';
+  $('#notify-summary').checked = state.settings.notifySummary !== false;
+  $('#notify-time').value = state.settings.notifyTime || '09:00';
+  $('#notify-time').disabled = state.settings.notifySummary === false;
+  $('#notify-hide').checked = !!state.settings.notifyHideNames;
+}
+
+// Number on the home-screen icon: tasks due today + overdue
+function updateBadge() {
+  if (!('setAppBadge' in navigator)) return;
+  const today = todayISO();
+  const n = state.todos.filter((t) => !t.done && t.due && t.due <= today).length;
+  (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+}
+
+$('#notify-summary')?.addEventListener('change', (ev) => { state.settings.notifySummary = ev.target.checked; commit(); });
+$('#notify-time')?.addEventListener('change', (ev) => { if (ev.target.value) { state.settings.notifyTime = ev.target.value; commit(); } });
+$('#notify-hide')?.addEventListener('change', (ev) => { state.settings.notifyHideNames = ev.target.checked; commit(); });
+
 /* ---------- Change an entry's category ---------- */
 
 let sheetEntryId = null;
@@ -751,7 +813,9 @@ $('#entry-date').value = todayISO();
 $$('[data-icon]').forEach((el) => { el.innerHTML = pixelIcon(el.dataset.icon, 26); });
 renderCategoryOptions();
 render();
-showView('home');
+showView(location.hash === '#tasks' ? 'tasks' : 'home');
+PushReminders.init(() => state);
+navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data?.type === 'open-tasks') showView('tasks'); });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* offline mode unavailable */ });

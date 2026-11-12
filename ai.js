@@ -76,7 +76,7 @@ export function removeKey() {
 const SYSTEM_PROMPT = `You turn short notes from the user into actions for their personal Life Dashboard app, which has a to-do list and a money log. Return every action the message asks for, and no others.
 
 How to fill each action:
-- add_task: task_text is a short, clear title (drop filler like "remind me to"). due is a YYYY-MM-DD date worked out from today's date, or "" when no date is given. Events, appointments and reminders are tasks with a due date.
+- add_task: task_text is a short, clear title (drop filler like "remind me to"). due is a YYYY-MM-DD date worked out from today's date, or "" when no date is given. due_time is the time in 24-hour HH:MM when the user gives one ("at 5pm" is "17:00"), otherwise "". Events, appointments and reminders are tasks with a due date; a task with a due_time sends a notification at that time.
 - complete_task: only for a task that appears in the open-task list; put its id in task_id.
 - add_entry: money the user received is income, money they spent or paid is expense. amount is a positive number in the user's currency. Use the closest category from the matching list, or Other if none fits. Nightlife is clubs, bars, covers and drinks out; Technology is gadgets, electronics and accessories; Self care is haircuts, barber, beauty, skincare, nails and spa; Dumb things is impulse buys or purchases the user calls dumb, silly or a waste. note is a few words of context, such as who or what. date is today unless the user says otherwise.
 - Fields that don't apply to an action: use "" for text and 0 for numbers.
@@ -93,11 +93,12 @@ const RESULT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['kind', 'task_text', 'due', 'task_id', 'entry_type', 'amount', 'category', 'note', 'date'],
+        required: ['kind', 'task_text', 'due', 'due_time', 'task_id', 'entry_type', 'amount', 'category', 'note', 'date'],
         properties: {
           kind: { type: 'string', enum: ['add_task', 'complete_task', 'add_entry'] },
           task_text: { type: 'string' },
           due: { type: 'string' },
+          due_time: { type: 'string' },
           task_id: { type: 'string' },
           entry_type: { type: 'string', enum: ['expense', 'income', ''] },
           amount: { type: 'number' },
@@ -113,7 +114,7 @@ const RESULT_SCHEMA = {
 
 function contextMessage(text, ctx) {
   const tasks = ctx.openTasks.length
-    ? ctx.openTasks.map((t) => `- id ${t.id}: ${t.text}${t.due ? ` (due ${t.due})` : ''}`).join('\n')
+    ? ctx.openTasks.map((t) => `- id ${t.id}: ${t.text}${t.due ? ` (due ${t.due}${t.time ? ` ${t.time}` : ''})` : ''}`).join('\n')
     : '(none)';
   return `Today is ${ctx.weekday}, ${ctx.today}. Currency: ${ctx.currency}.
 Expense categories: ${ctx.expenseCategories.join(', ')}

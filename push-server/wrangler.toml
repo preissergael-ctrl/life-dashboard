@@ -1,0 +1,18 @@
+# Cloudflare Worker that sends reminder notifications for Life Dashboard.
+# Deploy: npx wrangler deploy   (see README.md in this folder)
+name = "life-dashboard-push"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["* * * * *"]   # every minute
+
+[vars]
+ALLOWED_ORIGINS = "https://preissergael-ctrl.github.io,http://localhost:5173"
+VAPID_SUBJECT = "https://preissergael-ctrl.github.io/life-dashboard/"
+VAPID_PUBLIC = "BDOOFamxUFpkgewOjAl3683NkQFqYCgZZaPp1ygYK4ksEl83QsA37tIyqIF7y5HTi-5qkpRg1i-sbqMd5f9r_M8"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "life-dashboard-push"
+database_id = "5e57edf1-aab2-4c4c-8c7a-4be9842f4b09"
