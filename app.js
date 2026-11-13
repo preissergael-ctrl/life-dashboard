@@ -404,6 +404,15 @@ const actions = {
     finally { el.disabled = false; }
   },
 
+  'recap-preview': () => {
+    const out = $('#recap-out');
+    const r = PushReminders.recapFor(state);
+    out.hidden = false;
+    out.innerHTML = r
+      ? `<b>${esc(r.title)}</b>\n${esc(r.body)}`
+      : 'Nothing logged this week yet, so there is no recap to send.';
+  },
+
   'mail-gmail': () => { $('#gmail-form').hidden = false; $('#mail-add-row').hidden = true; $('#gmail-email').focus(); },
   'mail-cancel': () => closeGmailForm(),
   'mail-ms': async (el) => {
@@ -819,6 +828,9 @@ function renderNotify() {
   $('#notify-time').value = state.settings.notifyTime || '09:00';
   $('#notify-time').disabled = state.settings.notifySummary === false;
   $('#notify-hide').checked = !!state.settings.notifyHideNames;
+  $('#recap-on').checked = state.settings.recapOn !== false;
+  $('#recap-time').value = state.settings.recapTime || '20:00';
+  $('#recap-time').disabled = state.settings.recapOn === false;
 }
 
 // Number on the home-screen icon: tasks due today + overdue
@@ -832,6 +844,8 @@ function updateBadge() {
 $('#notify-summary')?.addEventListener('change', (ev) => { state.settings.notifySummary = ev.target.checked; commit(); });
 $('#notify-time')?.addEventListener('change', (ev) => { if (ev.target.value) { state.settings.notifyTime = ev.target.value; commit(); } });
 $('#notify-hide')?.addEventListener('change', (ev) => { state.settings.notifyHideNames = ev.target.checked; commit(); });
+$('#recap-on')?.addEventListener('change', (ev) => { state.settings.recapOn = ev.target.checked; commit(); });
+$('#recap-time')?.addEventListener('change', (ev) => { if (ev.target.value) { state.settings.recapTime = ev.target.value; commit(); } });
 
 /* ---------- Email accounts (morning summary) ---------- */
 
@@ -939,9 +953,12 @@ $('#entry-date').value = todayISO();
 $$('[data-icon]').forEach((el) => { el.innerHTML = pixelIcon(el.dataset.icon, 26); });
 renderCategoryOptions();
 render();
-showView({ '#tasks': 'tasks', '#settings': 'settings' }[location.hash] || 'home');
+showView({ '#tasks': 'tasks', '#money': 'money', '#settings': 'settings' }[location.hash] || 'home');
 PushReminders.init(() => state);
-navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data?.type === 'open-tasks') showView('tasks'); });
+navigator.serviceWorker?.addEventListener('message', (ev) => {
+  if (ev.data?.type === 'open-tasks') showView('tasks');
+  if (ev.data?.type === 'open-view' && ['tasks', 'money'].includes(ev.data.view)) showView(ev.data.view);
+});
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* offline mode unavailable */ });

@@ -1,7 +1,7 @@
 // Service worker: lets the app open with no internet.
 // Strategy: try the network first (so you always get the newest version),
 // fall back to the saved copy when offline.
-const CACHE = 'lifedash-v13';
+const CACHE = 'lifedash-v14';
 const APP_FILES = [
   './', './index.html', './styles.css', './pixels.js', './pdf-import.js', './push.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
   './manifest.webmanifest',
@@ -47,7 +47,7 @@ self.addEventListener('push', (event) => {
     tag: msg.tag || undefined,          // same tag replaces instead of stacking
     icon: './icons/icon-192.png',
     badge: './icons/badge-96.png',      // small white icon in the status bar
-    data: { url: './#tasks' },
+    data: { view: String(msg.tag || '').startsWith('w:') ? 'money' : 'tasks' }, // weekly recap opens Money
   }));
 });
 
@@ -56,9 +56,10 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const view = event.notification.data?.view || 'tasks';
     for (const w of wins) {
-      if (w.url.startsWith(self.registration.scope)) { w.postMessage({ type: 'open-tasks' }); return w.focus(); }
+      if (w.url.startsWith(self.registration.scope)) { w.postMessage({ type: 'open-view', view }); return w.focus(); }
     }
-    return self.clients.openWindow(event.notification.data?.url || './');
+    return self.clients.openWindow(`./#${view}`);
   })());
 });

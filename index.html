@@ -160,7 +160,8 @@
         </div>
         <div id="notify-on-wrap" hidden>
           <label class="toggle-row"><input type="checkbox" id="notify-summary"> <span>Daily summary at</span> <input type="time" id="notify-time" class="mini-time"></label>
-          <label class="toggle-row"><input type="checkbox" id="notify-hide"> <span>Hide names in notifications (tasks and email senders)</span></label>
+          <label class="toggle-row"><input type="checkbox" id="recap-on"> <span>Sunday recap at</span> <input type="time" id="recap-time" class="mini-time"></label>
+          <label class="toggle-row"><input type="checkbox" id="notify-hide"> <span>Hide names in notifications</span></label>
 
           <div class="mail-box" id="mail-box">
             <h3>Email in the morning summary</h3>
@@ -192,8 +193,10 @@
 
           <div class="row" style="margin-top:14px">
             <button class="btn" data-action="notify-test">Send a test</button>
+            <button class="btn" data-action="recap-preview">Preview recap</button>
             <button class="btn danger" data-action="notify-off">Turn off</button>
           </div>
+          <p class="small mail-check-out" id="recap-out" hidden></p>
         </div>
       </article>
 

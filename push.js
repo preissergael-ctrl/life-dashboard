@@ -10,6 +10,7 @@
    - Tasks with a date AND a time: a notification at that time.
    - Daily summary (optional): "Today: 3 tasks" at the chosen time,
      plus how many emails came in (if email accounts are linked).
+   - Weekly money recap (optional): Sunday evening, "Your week: $2,340 spent".
    The list is re-sent whenever tasks change and when the app is opened.
    ========================================================= */
 
@@ -72,7 +73,47 @@ const PushReminders = (() => {
   const timeLabel = (hhmm) => new Date(`2000-01-01T${hhmm}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-  function buildReminders({ todos, settings }) {
+  /* ---------- Weekly money recap ---------- */
+
+  const addDays = (iso, n) => { const d = new Date(`${iso}T12:00`); d.setDate(d.getDate() + n); return isoDay(d); };
+
+  // The Sunday that ends this week (today if it's Sunday)
+  function thisSunday() {
+    const d = new Date();
+    d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+    return isoDay(d);
+  }
+
+  // Recap of the Monday-Sunday week ending on `sunday`. Returns null if nothing was logged.
+  function recapFor({ entries = [], settings = {} }, sunday = thisSunday()) {
+    const fmt = (n) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: settings.currency || 'MXN', maximumFractionDigits: 0 }).format(n);
+    const inRange = (from, to) => entries.filter((e) => e.date >= from && e.date <= to);
+    const week = inRange(addDays(sunday, -6), sunday);
+    const last = inRange(addDays(sunday, -13), addDays(sunday, -7));
+    const spent = week.filter((e) => e.type === 'expense');
+    const total = spent.reduce((n, e) => n + e.amount, 0);
+    const lastTotal = last.filter((e) => e.type === 'expense').reduce((n, e) => n + e.amount, 0);
+    const income = week.filter((e) => e.type === 'income').reduce((n, e) => n + e.amount, 0);
+    if (!total && !income) return null;
+
+    if (settings.notifyHideNames) return { title: 'Your weekly recap is ready', body: 'Open the app to see how your week went.' };
+
+    const byCat = {};
+    for (const e of spent) byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+    const top = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const lines = [];
+    if (top.length) lines.push(top.map(([cat, n]) => `${cat} ${fmt(n)}`).join(' · '));
+    if (lastTotal) {
+      const pct = Math.round(((total - lastTotal) / lastTotal) * 100);
+      lines.push(pct < 0 ? `${-pct}% less than last week 👏` : pct > 0 ? `${pct}% more than last week` : 'Same as last week');
+    }
+    const biggest = spent.reduce((a, e) => (!a || e.amount > a.amount ? e : a), null);
+    if (biggest && spent.length > 1) lines.push(`Biggest: ${fmt(biggest.amount)} · ${(biggest.note || biggest.category).slice(0, 40)}`);
+    if (income) lines.push(`Income ${fmt(income)}`);
+    return { title: total ? `Your week: ${fmt(total)} spent` : 'Your week: no spending 🎉', body: lines.join('\n') };
+  }
+
+  function buildReminders({ todos, settings, entries = [] }) {
     const now = Date.now();
     const hide = !!settings.notifyHideNames;
     const open = todos.filter((t) => !t.done);
@@ -121,6 +162,15 @@ const PushReminders = (() => {
         }
       }
     }
+    // Next Sunday's money recap. It's rebuilt every time an expense is logged, so it's always current.
+    if (settings.recapOn !== false) {
+      const time = settings.recapTime || '20:00';
+      let date = thisSunday();
+      if (new Date(`${date}T${time}`).getTime() <= now) date = addDays(date, 7);
+      const recap = recapFor({ entries, settings }, date);
+      if (recap) list.push({ id: `w:${date}`, at: new Date(`${date}T${time}`).getTime(), ...recap });
+    }
+
     return list.sort((a, b) => a.at - b.at).slice(0, 500);
   }
 
@@ -205,7 +255,7 @@ const PushReminders = (() => {
   }
 
   return {
-    init, schedule, enable, disable, test, status, buildReminders, timeLabel,
+    init, schedule, enable, disable, test, status, buildReminders, timeLabel, recapFor,
     mailList, addGmail, microsoftSignInUrl, removeMail, checkMail,
   };
 })();
