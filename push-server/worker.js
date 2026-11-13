@@ -5,8 +5,11 @@
 // phone as Web Push notifications. No libraries: the push encryption
 // (RFC 8291) and VAPID signing (RFC 8292) use the built-in Web Crypto API.
 //
-// Secret (set with `wrangler secret put`): VAPID_PRIVATE_JWK
-// Vars (wrangler.toml): ALLOWED_ORIGINS, VAPID_SUBJECT, VAPID_PUBLIC
+// Secrets (set with `wrangler secret put`): VAPID_PRIVATE_JWK, MAIL_KEY, MS_CLIENT_SECRET
+// Vars (wrangler.toml): ALLOWED_ORIGINS, VAPID_SUBJECT, VAPID_PUBLIC, MS_CLIENT_ID
+// Email in the morning summary: see mail.js
+
+import { mailRoutes, mailSummary, msCallback, deleteDeviceMail } from './mail.js';
 
 const MAX_REMINDERS = 500;   // per device
 const MAX_DEVICES = 50;      // whole server (it's a personal app)
@@ -27,7 +30,9 @@ export default {
       new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
-    const { pathname } = new URL(req.url);
+    const url = new URL(req.url);
+    const { pathname } = url;
+    if (req.method === 'GET' && pathname === '/mail/ms-callback') return msCallback(env, url);
     if (req.method !== 'POST') return json({ ok: true, service: 'life-dashboard-push' });
     if (!allowed.includes(origin)) return json({ error: 'origin not allowed' }, 403);
 
@@ -38,6 +43,12 @@ export default {
       if (pathname === '/sync') return json(await sync(env, body));
       if (pathname === '/test') return json(await test(env, body));
       if (pathname === '/unregister') return json(await unregister(env, body));
+      if (pathname.startsWith('/mail/')) {
+        const device = await authDevice(env, body.device, body.token);
+        if (!device) fail('unknown device', 401);
+        const result = await mailRoutes(env, pathname, body, device, url.origin);
+        if (result) return json(result);
+      }
       return json({ error: 'not found' }, 404);
     } catch (err) {
       return json({ error: err.message }, err.status || 500);
@@ -80,11 +91,11 @@ async function sync(env, body) {
     if (count >= MAX_DEVICES) fail('server full', 503);
     device = { id: crypto.randomUUID() };
     token = b64url(crypto.getRandomValues(new Uint8Array(24)));
-    await env.DB.prepare('INSERT INTO devices (id, token_hash, endpoint, p256dh, auth, created, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(device.id, await sha256(token), sub.endpoint, sub.keys.p256dh, sub.keys.auth, now, now).run();
+    await env.DB.prepare('INSERT INTO devices (id, token_hash, endpoint, p256dh, auth, created, last_seen, hide_names) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(device.id, await sha256(token), sub.endpoint, sub.keys.p256dh, sub.keys.auth, now, now, body.hideNames ? 1 : 0).run();
   } else {
-    await env.DB.prepare('UPDATE devices SET endpoint = ?, p256dh = ?, auth = ?, last_seen = ? WHERE id = ?')
-      .bind(sub.endpoint, sub.keys.p256dh, sub.keys.auth, now, device.id).run();
+    await env.DB.prepare('UPDATE devices SET endpoint = ?, p256dh = ?, auth = ?, last_seen = ?, hide_names = ? WHERE id = ?')
+      .bind(sub.endpoint, sub.keys.p256dh, sub.keys.auth, now, body.hideNames ? 1 : 0, device.id).run();
   }
 
   const rows = body.reminders
@@ -104,7 +115,10 @@ async function sync(env, body) {
 async function test(env, body) {
   const device = await authDevice(env, body.device, body.token);
   if (!device) fail('unknown device', 401);
-  const res = await sendPush(env, device, { title: 'Life Dashboard', body: 'Notifications are working 🎉', tag: 'test' });
+  let text = 'Notifications are working 🎉';
+  const mail = await mailSummary(env, device.id, !!device.hide_names).catch(() => null);
+  if (mail) text += `\n${mail.text}`;
+  const res = await sendPush(env, device, { title: 'Life Dashboard', body: text, tag: 'test' });
   if (!res.ok) fail(`push service said ${res.status}`, 502);
   return { sent: true };
 }
@@ -112,10 +126,7 @@ async function test(env, body) {
 async function unregister(env, body) {
   const device = await authDevice(env, body.device, body.token);
   if (!device) return { removed: false };
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM reminders WHERE device_id = ?').bind(device.id),
-    env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(device.id),
-  ]);
+  await forgetDevice(env, device.id);
   return { removed: true };
 }
 
@@ -124,7 +135,7 @@ async function unregister(env, body) {
 async function sendDue(env) {
   const now = Date.now();
   const { results } = await env.DB.prepare(
-    `SELECT r.device_id, r.rid, r.fire_at, r.title, r.body, d.endpoint, d.p256dh, d.auth
+    `SELECT r.device_id, r.rid, r.fire_at, r.title, r.body, d.endpoint, d.p256dh, d.auth, d.hide_names
        FROM reminders r JOIN devices d ON d.id = r.device_id
       WHERE r.fire_at <= ? ORDER BY r.fire_at LIMIT 100`).bind(now).all();
   if (results.length) console.log('due:', results.length);
@@ -132,9 +143,21 @@ async function sendDue(env) {
   for (const r of results) {
     await env.DB.prepare('DELETE FROM reminders WHERE device_id = ? AND rid = ?').bind(r.device_id, r.rid).run();
     if (r.fire_at < now - STALE_MS) continue;
+    let { title, body } = r;
+    // Morning summary: add the email part. "s:" = has tasks (always sent), "m:" = email only (sent if there's email)
+    if (r.rid.startsWith('s:') || r.rid.startsWith('m:')) {
+      const mail = await mailSummary(env, r.device_id, !!r.hide_names).catch((err) => { console.log('mail summary failed', err.message); return null; });
+      if (r.rid.startsWith('m:')) {
+        if (!mail || (!mail.total && !mail.errors)) continue;
+        title = mail.total ? `Good morning ☀️ ${mail.total} new email${mail.total === 1 ? '' : 's'}` : 'Good morning ☀️';
+        body = mail.text.split('\n').slice(1).join('\n') || mail.text;
+      } else if (mail) {
+        body = body ? `${body}\n${mail.text}` : mail.text;
+      }
+    }
     let res;
     try {
-      res = await sendPush(env, r, { title: r.title, body: r.body, tag: r.rid });
+      res = await sendPush(env, r, { title, body, tag: r.rid });
     } catch (err) {
       console.log('push failed', r.rid, err.message); // network hiccup: skip this one, keep going
       continue;
@@ -142,12 +165,17 @@ async function sendDue(env) {
     console.log('sent', r.rid, res.status);
     if (res.status === 404 || res.status === 410) {
       // The phone unsubscribed (app uninstalled / permission removed): forget it
-      await env.DB.batch([
-        env.DB.prepare('DELETE FROM reminders WHERE device_id = ?').bind(r.device_id),
-        env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(r.device_id),
-      ]);
+      await forgetDevice(env, r.device_id);
     }
   }
+}
+
+async function forgetDevice(env, id) {
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM reminders WHERE device_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(id),
+  ]);
+  await deleteDeviceMail(env, id);
 }
 
 /* ---------------- Web Push ---------------- */

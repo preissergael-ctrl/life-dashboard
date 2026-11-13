@@ -288,6 +288,7 @@ function showView(name) {
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
   $$('.tab').forEach((t) => t.setAttribute('aria-current', t.dataset.to === name ? 'page' : 'false'));
   window.scrollTo(0, 0);
+  if (name === 'settings') loadMail();
 }
 
 /* ---------- Toast with optional Undo ---------- */
@@ -353,6 +354,7 @@ const actions = {
     try {
       await PushReminders.enable();
       renderNotify();
+      loadMail();
       toast('Notifications on');
     } catch (err) {
       toast(err.message || 'Could not turn on notifications.');
@@ -368,6 +370,40 @@ const actions = {
     try { await PushReminders.test(); toast('Test sent. It should arrive in a few seconds.'); }
     catch (err) { toast(`Test failed: ${err.message}`); }
     finally { el.disabled = false; }
+  },
+
+  'mail-gmail': () => { $('#gmail-form').hidden = false; $('#mail-add-row').hidden = true; $('#gmail-email').focus(); },
+  'mail-cancel': () => closeGmailForm(),
+  'mail-ms': async (el) => {
+    el.disabled = true;
+    // Open the tab right away (phones block pop-ups opened after a wait), then send it to Microsoft
+    const tab = window.open('', '_blank');
+    try {
+      const url = await PushReminders.microsoftSignInUrl();
+      if (tab) tab.location.href = url; else location.href = url;
+      toast('Sign in with Microsoft, then come back here.');
+    } catch (err) {
+      tab?.close();
+      toast(err.message);
+    } finally { el.disabled = false; }
+  },
+  'mail-remove': async (el) => {
+    if (!confirm(`Stop checking ${el.dataset.address}?`)) return;
+    el.disabled = true;
+    try { await PushReminders.removeMail(el.dataset.id); toast('Email account removed'); }
+    catch (err) { toast(err.message); }
+    loadMail();
+  },
+  'mail-check': async (el) => {
+    el.disabled = true;
+    const out = $('#mail-check-out');
+    out.hidden = false;
+    out.textContent = 'Checking…';
+    try {
+      const res = await PushReminders.checkMail();
+      out.textContent = res ? res.text : 'No email accounts linked yet.';
+    } catch (err) { out.textContent = `Couldn’t check: ${err.message}`; }
+    finally { el.disabled = false; loadMail(); }
   },
   'sheet-cat': (el) => changeCategory(el.dataset.cat),
   'sheet-close': () => $('#cat-sheet').close(),
@@ -763,6 +799,62 @@ $('#notify-summary')?.addEventListener('change', (ev) => { state.settings.notify
 $('#notify-time')?.addEventListener('change', (ev) => { if (ev.target.value) { state.settings.notifyTime = ev.target.value; commit(); } });
 $('#notify-hide')?.addEventListener('change', (ev) => { state.settings.notifyHideNames = ev.target.checked; commit(); });
 
+/* ---------- Email accounts (morning summary) ---------- */
+
+let mailLoading = false;
+let mailLoadedAt = 0;
+
+// Asks the server which email accounts are linked and shows them
+async function loadMail() {
+  if (PushReminders.status() !== 'on' || mailLoading) return;
+  mailLoading = true;
+  try {
+    const { accounts } = await PushReminders.mailList();
+    mailLoadedAt = Date.now();
+    $('#mail-list').innerHTML = accounts.map((a) => `
+      <li class="mail-item">
+        <div class="mail-who">
+          <b>${esc(a.label)} ${a.ok ? '✓' : '⚠️'}</b>
+          <span>${esc(a.address)}</span>
+          ${a.ok ? '' : `<span class="mail-err">${esc(a.error || 'Couldn’t check last time')}. Remove it and connect again.</span>`}
+        </div>
+        <button class="btn" data-action="mail-remove" data-id="${esc(a.id)}" data-address="${esc(a.address)}">Remove</button>
+      </li>`).join('');
+    $('#mail-check-wrap').hidden = !accounts.length;
+  } catch (err) {
+    $('#mail-list').innerHTML = `<li class="small muted">Couldn’t load email accounts: ${esc(err.message)}</li>`;
+  } finally { mailLoading = false; }
+}
+
+function closeGmailForm() {
+  $('#gmail-form').hidden = true;
+  $('#mail-add-row').hidden = false;
+  $('#gmail-form').reset();
+}
+
+$('#gmail-form')?.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const btn = $('#gmail-submit');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const { account } = await PushReminders.addGmail($('#gmail-email').value, $('#gmail-pass').value);
+    closeGmailForm();
+    toast(`${account.address} connected`);
+    loadMail();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Connect Gmail';
+  }
+});
+
+// Back from the Microsoft sign-in tab: show the new account
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && ui.view === 'settings' && Date.now() - mailLoadedAt > 3000) loadMail();
+});
+
 /* ---------- Change an entry's category ---------- */
 
 let sheetEntryId = null;
@@ -813,7 +905,7 @@ $('#entry-date').value = todayISO();
 $$('[data-icon]').forEach((el) => { el.innerHTML = pixelIcon(el.dataset.icon, 26); });
 renderCategoryOptions();
 render();
-showView(location.hash === '#tasks' ? 'tasks' : 'home');
+showView({ '#tasks': 'tasks', '#settings': 'settings' }[location.hash] || 'home');
 PushReminders.init(() => state);
 navigator.serviceWorker?.addEventListener('message', (ev) => { if (ev.data?.type === 'open-tasks') showView('tasks'); });
 

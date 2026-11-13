@@ -8,7 +8,8 @@
    when it's due, even if the app is closed.
 
    - Tasks with a date AND a time: a notification at that time.
-   - Daily summary (optional): "Today: 3 tasks" at the chosen time.
+   - Daily summary (optional): "Today: 3 tasks" at the chosen time,
+     plus how many emails came in (if email accounts are linked).
    The list is re-sent whenever tasks change and when the app is opened.
    ========================================================= */
 
@@ -110,6 +111,15 @@ const PushReminders = (() => {
         }
         list.push({ id: `s:${date}`, at, title, body });
       }
+      // Days with no tasks: an email-only summary. The server sends it only if there's new email.
+      if (device()?.mail) {
+        const day2 = new Date();
+        for (let i = 0; i < SUMMARY_DAYS; i++, day2.setDate(day2.getDate() + 1)) {
+          const date = isoDay(day2);
+          const at = new Date(`${date}T${time}`).getTime();
+          if (at > now && !list.some((r) => r.id === `s:${date}`)) list.push({ id: `m:${date}`, at, title: 'Email', body: '' });
+        }
+      }
     }
     return list.sort((a, b) => a.at - b.at).slice(0, 500);
   }
@@ -120,11 +130,11 @@ const PushReminders = (() => {
     if (status() !== 'on') return;
     const sub = await subscription(true);
     const reminders = buildReminders(getState());
-    const fingerprint = JSON.stringify([sub.endpoint, reminders]);
+    const fingerprint = JSON.stringify([sub.endpoint, reminders, !!getState().settings.notifyHideNames]);
     if (!force && fingerprint === lastSent) return;
     const d = device() || {};
-    const res = await post('/sync', { device: d.device, token: d.token, subscription: sub.toJSON(), reminders });
-    saveDevice({ device: res.device, token: res.token });
+    const res = await post('/sync', { device: d.device, token: d.token, subscription: sub.toJSON(), reminders, hideNames: !!getState().settings.notifyHideNames });
+    saveDevice({ ...d, device: res.device, token: res.token });
     lastSent = fingerprint;
   }
 
@@ -140,8 +150,11 @@ const PushReminders = (() => {
     if (perm !== 'granted') throw new Error('Notifications were not allowed. You can allow them in the phone’s app settings.');
     const sub = await subscription(true);
     const d = device() || {};
-    const res = await post('/sync', { device: d.device, token: d.token, subscription: sub.toJSON(), reminders: buildReminders(getState()) });
-    saveDevice({ device: res.device, token: res.token });
+    const res = await post('/sync', {
+      device: d.device, token: d.token, subscription: sub.toJSON(),
+      reminders: buildReminders(getState()), hideNames: !!getState().settings.notifyHideNames,
+    });
+    saveDevice({ ...d, device: res.device, token: res.token });
     lastSent = '';
     return res.scheduled;
   }
@@ -159,6 +172,31 @@ const PushReminders = (() => {
     await post('/test', device());
   }
 
+  /* ---------- Email accounts (shown in the morning summary) ---------- */
+
+  async function mailCall(path, extra = {}) {
+    const d = device();
+    if (!d) throw new Error('Turn on notifications first.');
+    return post(path, { device: d.device, token: d.token, ...extra });
+  }
+
+  // Lists linked accounts and remembers how many, so email-only mornings get scheduled
+  async function mailList() {
+    const res = await mailCall('/mail/list');
+    const d = device();
+    if (d && d.mail !== res.accounts.length) {
+      saveDevice({ ...d, mail: res.accounts.length });
+      lastSent = '';
+      schedule();
+    }
+    return res;
+  }
+
+  const addGmail = (email, password) => mailCall('/mail/add-gmail', { email, password });
+  const microsoftSignInUrl = async () => (await mailCall('/mail/ms-start')).url;
+  const removeMail = (id) => mailCall('/mail/remove', { id });
+  const checkMail = () => mailCall('/mail/check');
+
   function init(stateGetter) {
     getState = stateGetter;
     // Coming back to the app: re-send so the 30-day summary window keeps rolling
@@ -166,5 +204,8 @@ const PushReminders = (() => {
     schedule();
   }
 
-  return { init, schedule, enable, disable, test, status, buildReminders, timeLabel };
+  return {
+    init, schedule, enable, disable, test, status, buildReminders, timeLabel,
+    mailList, addGmail, microsoftSignInUrl, removeMail, checkMail,
+  };
 })();

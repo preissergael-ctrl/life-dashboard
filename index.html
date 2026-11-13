@@ -159,7 +159,36 @@
         </div>
         <div id="notify-on-wrap" hidden>
           <label class="toggle-row"><input type="checkbox" id="notify-summary"> <span>Daily summary at</span> <input type="time" id="notify-time" class="mini-time"></label>
-          <label class="toggle-row"><input type="checkbox" id="notify-hide"> <span>Hide task names in notifications</span></label>
+          <label class="toggle-row"><input type="checkbox" id="notify-hide"> <span>Hide names in notifications (tasks and email senders)</span></label>
+
+          <div class="mail-box" id="mail-box">
+            <h3>Email in the morning summary</h3>
+            <p class="muted small">How many emails came in the last 24 hours, and who sent them. It only looks, so nothing gets marked as read.</p>
+            <ul class="mail-list" id="mail-list"></ul>
+            <div class="row" id="mail-add-row">
+              <button class="btn" data-action="mail-gmail">+ Gmail</button>
+              <button class="btn" data-action="mail-ms">+ Outlook / Tec</button>
+            </div>
+            <form id="gmail-form" class="gmail-form" autocomplete="off" hidden>
+              <p class="small">Google needs an <b>app password</b>, not your normal password:</p>
+              <ol class="small steps">
+                <li>Make sure 2-Step Verification is on in your Google account.</li>
+                <li>Open <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>, type <b>Life Dashboard</b> and tap Create.</li>
+                <li>Copy the 16 letters and paste them below.</li>
+              </ol>
+              <label class="field"><span>Gmail address</span><input id="gmail-email" type="email" inputmode="email" placeholder="you@gmail.com" required></label>
+              <label class="field"><span>App password</span><input id="gmail-pass" type="password" placeholder="abcd efgh ijkl mnop" required autocomplete="off"></label>
+              <div class="row" style="margin-top:12px">
+                <button class="btn primary" type="submit" id="gmail-submit">Connect Gmail</button>
+                <button class="btn" type="button" data-action="mail-cancel">Cancel</button>
+              </div>
+            </form>
+            <div id="mail-check-wrap" hidden>
+              <button class="btn" data-action="mail-check" style="margin-top:12px">Check email now</button>
+              <p class="small mail-check-out" id="mail-check-out" hidden></p>
+            </div>
+          </div>
+
           <div class="row" style="margin-top:14px">
             <button class="btn" data-action="notify-test">Send a test</button>
             <button class="btn danger" data-action="notify-off">Turn off</button>

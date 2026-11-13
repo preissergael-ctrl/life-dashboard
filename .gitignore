@@ -5,3 +5,4 @@ Thumbs.db
 # Cloudflare tool cache
 .wrangler/
 node_modules/
+.dev.vars
