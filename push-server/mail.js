@@ -38,11 +38,14 @@ export async function mailSummary(env, deviceId, hideNames) {
   const since = Date.now() - WINDOW_MS;
   const checks = await Promise.allSettled(accounts.map((a) => withTimeout(checkAccount(env, a, since), CHECK_TIMEOUT_MS)));
 
-  const parts = [], errors = [], messages = [];
+  const counts = new Map(); // label -> count ("Gmail", plus "Tec" for Tec mail forwarded into Gmail)
+  const add = (label, n) => counts.set(label, (counts.get(label) || 0) + n);
+  const errors = [], messages = [];
   for (let i = 0; i < accounts.length; i++) {
     const a = accounts[i], c = checks[i];
     if (c.status === 'fulfilled') {
-      parts.push({ label: a.label, count: c.value.count });
+      add(a.label, c.value.count);
+      for (const m of c.value.messages) if (m.via) { add(m.via, 1); add(a.label, -1); }
       messages.push(...c.value.messages);
       await env.DB.prepare('UPDATE mail_accounts SET last_ok = ?, last_error = NULL WHERE id = ?').bind(Date.now(), a.id).run();
     } else {
@@ -52,6 +55,7 @@ export async function mailSummary(env, deviceId, hideNames) {
     }
   }
 
+  const parts = [...counts].map(([label, count]) => ({ label, count }));
   const total = parts.reduce((n, p) => n + p.count, 0);
   const senders = [];
   for (const m of messages.sort((x, y) => y.at - x.at)) {
@@ -61,7 +65,7 @@ export async function mailSummary(env, deviceId, hideNames) {
 
   let head;
   if (!total) head = '📧 No new email';
-  else if (accounts.length === 1) head = `📧 ${plural(total, 'new email')}`;
+  else if (parts.length === 1) head = `📧 ${plural(total, 'new email')}`;
   else head = `📧 ${total} new — ${parts.filter((p) => p.count).map((p) => `${p.label} ${p.count}`).join(' · ')}`;
   const lines = [head];
   if (total && senders.length && !hideNames) lines.push(`From ${senders.join(', ')}${total > senders.length ? '…' : ''}`);
@@ -142,17 +146,21 @@ async function gmailCheck(env, email, password, since) {
     await imap.command(`LOGIN ${imapQuote(email)} ${imapQuote(password)}`);
     await imap.command('EXAMINE INBOX'); // read-only: nothing gets marked as read
     const days = Math.max(1, Math.round((Date.now() - since) / 864e5));
-    const search = await imap.command(`UID SEARCH X-GM-RAW ${imapQuote(`category:primary is:unread newer_than:${days}d`)}`);
+    // Primary tab, plus mail forwarded from Tec / Outlook (Gmail may file that under Updates/Promotions)
+    const forwarded = FORWARDED.map(([domain]) => `to:${domain}`).join(' OR ');
+    const query = `is:unread newer_than:${days}d (category:primary OR ${forwarded})`;
+    const search = await imap.command(`UID SEARCH X-GM-RAW ${imapQuote(query)}`);
     const uids = search.flatMap((r) => (r.line.match(/^\* SEARCH(.*)$/i)?.[1] || '').trim().split(/\s+/)).filter(Boolean).map(Number);
     const messages = [];
-    const recent = uids.sort((a, b) => a - b).slice(-25);
+    const recent = uids.sort((a, b) => a - b).slice(-100);
     if (recent.length) {
-      const res = await imap.command(`UID FETCH ${recent.join(',')} (INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM)])`);
+      const res = await imap.command(`UID FETCH ${recent.join(',')} (INTERNALDATE BODY.PEEK[HEADER.FIELDS (${FORWARD_HEADERS})])`);
       for (const r of res) {
         if (!/^\* \d+ FETCH/i.test(r.line)) continue;
         const date = r.line.match(/INTERNALDATE "([^"]+)"/i)?.[1];
         const at = date ? Date.parse(date.trim().replace(/^(\d+)-(\w+)-/, '$1 $2 ')) || 0 : 0;
-        messages.push({ at, from: senderName(r.literals.join('')) });
+        const header = r.literals.join('');
+        messages.push({ at, from: senderName(header), via: forwardedFrom(header, email) });
       }
     }
     imap.command('LOGOUT').catch(() => {});
@@ -160,6 +168,24 @@ async function gmailCheck(env, email, password, since) {
   } finally {
     imap.close();
   }
+}
+
+// Mail forwarded into Gmail from these accounts is shown under its own label ("📧 7 new — Gmail 4 · Tec 3").
+// Forwarding keeps the original To: line, so a Tec address in To/Cc means it came from Tec.
+const FORWARDED = [['tec.mx', 'Tec'], ['outlook.com', 'Outlook'], ['hotmail.com', 'Outlook'], ['live.com', 'Outlook']];
+const FORWARD_HEADERS = 'FROM TO CC X-MS-EXCHANGE-INBOX-RULES-LOOP X-FORWARDED-FOR RESENT-FROM';
+
+function forwardedFrom(header, ownAddress) {
+  const unfolded = header.replace(/\r?\n[ \t]+/g, ' ');
+  const lines = unfolded.split(/\r?\n/).filter((l) => /^(to|cc|x-ms-exchange-inbox-rules-loop|x-forwarded-for|resent-from):/i.test(l));
+  const addresses = lines.join(' ').toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+/g) || [];
+  for (const addr of addresses) {
+    if (addr === ownAddress.toLowerCase()) continue;
+    const domain = addr.split('@')[1];
+    const hit = FORWARDED.find(([d]) => domain === d || domain.endsWith(`.${d}`));
+    if (hit) return hit[1];
+  }
+  return null;
 }
 
 // A tiny IMAP client: just enough for LOGIN / EXAMINE / SEARCH / FETCH.
