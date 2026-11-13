@@ -104,6 +104,18 @@ function sortTodos(list) {
     (a.done - b.done) || key(a).localeCompare(key(b)) || (a.createdAt - b.createdAt));
 }
 
+// "Upcoming" = not done and due after today. Everything else open (today, overdue, no date) is "To do".
+const isUpcoming = (t) => !t.done && !!t.due && t.due > todayISO();
+const isCurrent = (t) => !t.done && !isUpcoming(t);
+
+// Header for a day in the Upcoming list: "Tomorrow", "Friday", "Mon, Dec 1"
+function dayHeading(iso) {
+  const days = daysFromToday(iso);
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return fmtDate(iso, { weekday: 'long' });
+  return fmtDate(iso);
+}
+
 function dueInfo(t) {
   if (!t.due) return null;
   const at = t.time ? ` · ${PushReminders.timeLabel(t.time)}` : '';
@@ -116,8 +128,10 @@ function dueInfo(t) {
   return { label: fmtDate(t.due) + at + bell, cls: '' };
 }
 
-function todoHTML(t) {
-  const due = dueInfo(t);
+// grouped = shown under a day heading (Upcoming tab): only the time is needed
+function todoHTML(t, grouped = false) {
+  let due = dueInfo(t);
+  if (grouped) due = t.time ? { label: `${PushReminders.timeLabel(t.time)} 🔔`, cls: '' } : null;
   return `
     <li class="todo${t.done ? ' done' : ''}">
       <label class="check">
@@ -161,17 +175,19 @@ function renderHome() {
   $('#today-label').textContent = fmtDate(todayISO(), { weekday: 'long', month: 'long', day: 'numeric' });
 
   const today = todayISO();
-  const open = state.todos.filter((t) => !t.done);
+  const open = state.todos.filter(isCurrent);
   const dueToday = open.filter((t) => t.due === today).length;
   const overdue = open.filter((t) => t.due && t.due < today).length;
+  const upcoming = state.todos.filter(isUpcoming).length;
   $('#home-task-stats').innerHTML = `
     <span class="stat">${open.length} to do</span>
     <span class="stat ${dueToday ? 'today' : ''}">${dueToday} due today</span>
-    <span class="stat ${overdue ? 'overdue' : ''}">${overdue} overdue</span>`;
+    <span class="stat ${overdue ? 'overdue' : ''}">${overdue} overdue</span>
+    ${upcoming ? `<span class="stat">${upcoming} upcoming</span>` : ''}`;
   const next = sortTodos(open).slice(0, 4);
   $('#home-todos').innerHTML = next.length
-    ? next.map(todoHTML).join('')
-    : `<li class="empty">${pixelIcon('check', 32)}<br>Nothing to do. Nice!</li>`;
+    ? next.map((t) => todoHTML(t)).join('')
+    : `<li class="empty">${pixelIcon('check', 32)}<br>Nothing to do today. Nice!</li>`;
 
   const thisMonth = monthOf(today);
   const entries = state.entries.filter((e) => monthOf(e.date) === thisMonth);
@@ -184,16 +200,32 @@ function renderHome() {
 }
 
 function renderTasks() {
-  const open = state.todos.filter((t) => !t.done).length;
-  const done = state.todos.length - open;
-  $('#task-count').textContent = `${open} to do · ${done} done`;
+  const current = state.todos.filter(isCurrent).length;
+  const upcoming = state.todos.filter(isUpcoming).length;
+  const done = state.todos.filter((t) => t.done).length;
+  $('#task-count').textContent = `${current} to do · ${upcoming} upcoming · ${done} done`;
 
   $$('#task-filters .chip').forEach((c) => c.classList.toggle('active', c.dataset.filter === ui.taskFilter));
+  $('#upcoming-count').textContent = upcoming || '';
 
-  const shown = sortTodos(state.todos.filter((t) =>
-    ui.taskFilter === 'all' ? true : ui.taskFilter === 'done' ? t.done : !t.done));
-  const emptyMsg = { active: 'All caught up! Add a task above.', done: 'No completed tasks yet.', all: 'No tasks yet. Add one above.' };
-  $('#todo-list').innerHTML = shown.length ? shown.map(todoHTML).join('') : `<li class="empty">${emptyMsg[ui.taskFilter]}</li>`;
+  const test = { active: isCurrent, upcoming: isUpcoming, done: (t) => t.done, all: () => true }[ui.taskFilter];
+  const shown = sortTodos(state.todos.filter(test));
+  const emptyMsg = {
+    active: upcoming ? 'Nothing left for today 🎉 Check Upcoming for what’s next.' : 'All caught up! Add a task above.',
+    upcoming: 'Nothing planned yet. Give a task a future date and it shows up here.',
+    done: 'No completed tasks yet.',
+    all: 'No tasks yet. Add one above.',
+  };
+  let html = '';
+  if (ui.taskFilter === 'upcoming') {
+    // Group by day: "Tomorrow", "Friday", "Mon, Dec 1"
+    let lastDay = '';
+    for (const t of shown) {
+      if (t.due !== lastDay) { html += `<li class="todo-group">${esc(dayHeading(t.due))}</li>`; lastDay = t.due; }
+      html += todoHTML(t, true);
+    }
+  } else html = shown.map((t) => todoHTML(t)).join('');
+  $('#todo-list').innerHTML = html || `<li class="empty">${emptyMsg[ui.taskFilter]}</li>`;
   $('#clear-done').hidden = done === 0;
 }
 
@@ -474,9 +506,11 @@ $('#todo-form').addEventListener('submit', (ev) => {
   if (!text) return;
   const time = $('#todo-time').value || '';
   const due = $('#todo-due').value || (time ? todayISO() : ''); // a time with no date means today
-  state.todos.push({ id: uid(), text, due, time, done: false, createdAt: Date.now() });
+  const task = { id: uid(), text, due, time, done: false, createdAt: Date.now() };
+  state.todos.push(task);
   if (ui.taskFilter === 'done') ui.taskFilter = 'active';
   commit();
+  if (isUpcoming(task) && ui.taskFilter === 'active') toast(`Added to Upcoming · ${dayHeading(due)}`);
   $('#todo-text').value = '';
   $('#todo-due').value = '';
   $('#todo-time').value = '';

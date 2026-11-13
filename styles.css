@@ -164,6 +164,10 @@ input:focus-visible { outline: none; }
 .todo-list.card { padding: 4px 18px; }
 .todo { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .todo:last-child { border-bottom: 0; }
+.todo-group { list-style: none; padding: 14px 0 4px; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line); }
+.todo-group:first-child { padding-top: 10px; }
+.chip-count { font-size: .75rem; opacity: .75; }
+.chip-count:empty { display: none; }
 .todo-body { flex: 1; min-width: 0; }
 .todo-text { overflow-wrap: anywhere; }
 .todo.done .todo-text { text-decoration: line-through; color: var(--muted); }
