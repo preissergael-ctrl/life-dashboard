@@ -1,11 +1,11 @@
 // Service worker: lets the app open with no internet.
 // Strategy: try the network first (so you always get the newest version),
 // fall back to the saved copy when offline.
-const CACHE = 'lifedash-v14';
+const CACHE = 'lifedash-v15';
 const APP_FILES = [
   './', './index.html', './styles.css', './pixels.js', './pdf-import.js', './push.js', './app.js', './ai.js', './vendor/anthropic-sdk.mjs',
   './manifest.webmanifest',
-  './fonts/fraunces.woff2', './fonts/dm-sans.woff2',
+  './fonts/pixelify.woff2', './fonts/atkinson.woff2',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/badge-96.png',
 ];
 

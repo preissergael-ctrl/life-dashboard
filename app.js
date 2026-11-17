@@ -203,7 +203,7 @@ function renderTasks() {
   const current = state.todos.filter(isCurrent).length;
   const upcoming = state.todos.filter(isUpcoming).length;
   const done = state.todos.filter((t) => t.done).length;
-  $('#task-count').textContent = `${current} to do · ${upcoming} upcoming · ${done} done`;
+  $('#task-count').textContent = `${current} to do, ${upcoming} upcoming, ${done} done`;
 
   $$('#task-filters .chip').forEach((c) => c.classList.toggle('active', c.dataset.filter === ui.taskFilter));
   $('#upcoming-count').textContent = upcoming || '';
